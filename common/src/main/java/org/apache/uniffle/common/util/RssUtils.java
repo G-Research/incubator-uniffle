@@ -338,7 +338,7 @@ public class RssUtils {
     long mask = (1L << Constants.PARTITION_ID_MAX_LENGTH) - 1;
     while (it.hasNext()) {
       Long blockId = it.next();
-      int partitionId = Math.toIntExact((blockId >> Constants.TASK_ATTEMPT_ID_MAX_LENGTH) & mask);
+      int partitionId = Math.toIntExact(blockId & mask);
       if (partitionId >= startPartition && partitionId < endPartition) {
         result.get(partitionId).add(blockId);
       }

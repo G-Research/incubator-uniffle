@@ -105,7 +105,7 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     createTestData(testAppId, expectedData, blockIdBitmap, taskIdBitmap);
-    blockIdBitmap.addLong((1 << Constants.TASK_ATTEMPT_ID_MAX_LENGTH));
+    blockIdBitmap.addLong(3L << Constants.PARTITION_ID_MAX_LENGTH);
     ShuffleReadClientImpl readClient;
     readClient =
         baseReadBuilder()
@@ -252,7 +252,7 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     Roaring64NavigableMap wrongBlockIdBitmap = Roaring64NavigableMap.bitmapOf();
     LongIterator iter = blockIdBitmap.getLongIterator();
     while (iter.hasNext()) {
-      wrongBlockIdBitmap.addLong(iter.next() + (1 << Constants.TASK_ATTEMPT_ID_MAX_LENGTH));
+      wrongBlockIdBitmap.addLong(iter.next() + 1);
     }
 
     ShuffleReadClientImpl readClient =

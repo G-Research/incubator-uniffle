@@ -56,10 +56,7 @@ public class HadoopShuffleHandlerTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId =
-          (ATOMIC_LONG.getAndIncrement()
-                  << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH))
-              + taskAttemptId;
+      long blockId = ATOMIC_LONG.getAndIncrement() << Constants.PARTITION_ID_MAX_LENGTH;
       blocks.add(
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf));
@@ -84,10 +81,7 @@ public class HadoopShuffleHandlerTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId =
-          (ATOMIC_LONG.getAndIncrement()
-                  << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH))
-              + taskAttemptId;
+      long blockId = ATOMIC_LONG.getAndIncrement() << Constants.PARTITION_ID_MAX_LENGTH;
       blocks.add(
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf));

@@ -106,7 +106,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
         expectedData.put(key, value);
         writeData(serializeStream, key, value);
       }
-      long blockId = ClientUtils.getBlockId(partitionID, 0, atomicInteger.getAndIncrement());
+      long blockId = ClientUtils.getBlockId(partitionID, atomicInteger.getAndIncrement());
       blockIdBitmap.add(blockId);
       blocks.add(createShuffleBlock(output.toBytes(), blockId, compress));
       serializeStream.close();

@@ -23,6 +23,7 @@ import org.apache.uniffle.common.util.IdHelper;
 public class DefaultIdHelper implements IdHelper {
   @Override
   public long getTaskAttemptId(long blockId) {
-    return blockId & Constants.MAX_TASK_ATTEMPT_ID;
+    // taskAttemptId has been removed from blockId, here partitionId serves as a proxy
+    return blockId & Constants.MAX_PARTITION_ID;
   }
 }

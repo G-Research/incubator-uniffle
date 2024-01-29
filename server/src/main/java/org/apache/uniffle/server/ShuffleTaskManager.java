@@ -560,7 +560,7 @@ public class ShuffleTaskManager {
     bitmap.forEach(
         blockId -> {
           int partitionId =
-              Math.toIntExact((blockId >> Constants.TASK_ATTEMPT_ID_MAX_LENGTH) & mask);
+              Math.toIntExact(blockId & mask);
           if (requestPartitions.contains(partitionId)) {
             resultBitmap.addLong(blockId);
           }

@@ -91,8 +91,8 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.checkProcessedBlockIds();
     readClient.close();
 
-    blockIdBitmap.addLong(Constants.MAX_TASK_ATTEMPT_ID - 1);
-    taskIdBitmap.addLong(Constants.MAX_TASK_ATTEMPT_ID - 1);
+    blockIdBitmap.addLong(Constants.MAX_SEQUENCE_NO - 1);
+    taskIdBitmap.addLong(Constants.MAX_SEQUENCE_NO - 1);
     readClient =
         baseReadBuilder()
             .basePath(basePath)
@@ -377,7 +377,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     Roaring64NavigableMap wrongBlockIdBitmap = Roaring64NavigableMap.bitmapOf();
     LongIterator iter = blockIdBitmap.getLongIterator();
     while (iter.hasNext()) {
-      wrongBlockIdBitmap.addLong(iter.next() + (1 << Constants.TASK_ATTEMPT_ID_MAX_LENGTH));
+      wrongBlockIdBitmap.addLong(iter.next() + 1);
     }
 
     ShuffleReadClientImpl readClient =
@@ -585,10 +585,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId =
-          (ATOMIC_LONG.getAndIncrement()
-                  << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH))
-              + taskAttemptId;
+      long blockId = ATOMIC_LONG.getAndIncrement() << Constants.PARTITION_ID_MAX_LENGTH;
       blocks.add(
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf));
@@ -610,10 +607,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId =
-          (ATOMIC_LONG.incrementAndGet()
-                  << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH))
-              + taskAttemptId;
+      long blockId = ATOMIC_LONG.incrementAndGet() << Constants.PARTITION_ID_MAX_LENGTH;
       ShufflePartitionedBlock spb =
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf);
