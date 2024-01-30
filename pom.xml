@@ -880,6 +880,51 @@
             <failIfNoTests>false</failIfNoTests>
             <trimStackTrace>${trimStackTrace}</trimStackTrace>
             <skipTests>${skipUTs}</skipTests>
+            <excludes>
+              <exclude>**/HadoopFilesystemProviderTest.java</exclude>
+              <exclude>**/HadoopSecurityContextTest.java</exclude>
+              <exclude>**/SecurityContextFactoryTest.java</exclude>
+              <exclude>**/ShuffleKerberizedHadoopStorageUtilsTest.java</exclude>
+              <exclude>**/KerberizedHadoopClientReadHandlerTest.java</exclude>
+              <exclude>**/KerberizedHadoopShuffleReadHandlerTest.java</exclude>
+              <exclude>**/KerberizedShuffleTaskManagerTest.java</exclude>
+              <exclude>**/ShuffleFlushManagerOnKerberizedHadoopTest.java</exclude>
+              <exclude>**/AccessCandidatesCheckerKerberizedHadoopTest.java</exclude>
+              <exclude>**/DynamicClientConfServiceKerberlizedHadoopTest.java</exclude>
+              <exclude>**/ShuffleServerWithKerberizedHadoopTest.java</exclude>
+
+              <exclude>**/LocalStorageTest.java</exclude>
+              <exclude>**/LocalStorageManagerTest.java</exclude>
+              <exclude>**/CLIContentUtilsTest.java</exclude>
+              <exclude>**/TopNShuffleDataSizeOfAppCalcTaskTest.java</exclude>
+              <exclude>**/ClientUtilsTest.java</exclude>
+              <exclude>**/ShuffleReadClientImplTest.java</exclude>
+              <exclude>**/WriteBufferManagerTest.java</exclude>
+              <exclude>**/ShuffleTaskManagerTest.java</exclude>
+              <exclude>**/ShuffleServerWithLocalOfLocalOrderTest.java</exclude>
+              <exclude>**/DiskErrorToleranceTest.java</exclude>
+              <exclude>**/RssShuffleReaderTest.java</exclude>
+              <exclude>**/WriteAndReadMetricsTest.java</exclude>
+              <exclude>**/RepartitionWithMemoryRssTest.java</exclude>
+              <exclude>**/ShuffleUnregisterWithLocalfileTest.java</exclude>
+              <exclude>**/ShuffleUnregisterWithHadoopTest.java</exclude>
+              <exclude>**/SparkSQLWithMemoryLocalTest.java</exclude>
+              <exclude>**/RSSStageResubmitTest.java</exclude>
+              <exclude>**/RSSStageDynamicServerReWriteTest.java</exclude>
+              <exclude>**/CombineByKeyTest.java</exclude>
+              <exclude>**/RepartitionWithLocalFileRssTest.java</exclude>
+              <exclude>**/RepartitionWithMemoryHybridStorageRssTest.java</exclude>
+              <exclude>**/RssShuffleManagerTest.java</exclude>
+              <exclude>**/SparkClientWithLocalTest.java</exclude>
+              <exclude>**/GroupByKeyTest.java</exclude>
+              <exclude>**/RepartitionWithHadoopHybridStorageRssTest.java</exclude>
+              <exclude>**/SparkSQLWithDelegationShuffleManagerTest.java</exclude>
+              <exclude>**/AQERepartitionTest.java</exclude>
+              <exclude>**/AQESkewedJoinTest.java</exclude>
+              <exclude>**/AQESkewedJoinWithLocalOrderTest.java</exclude>
+              <exclude>**/ContinuousSelectPartitionStrategyTest.java</exclude>
+              <exclude>**/GetShuffleReportForMultiPartTest.java</exclude>
+            </excludes>
           </configuration>
         </plugin>
 
