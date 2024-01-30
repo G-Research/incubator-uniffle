@@ -228,11 +228,9 @@ public class RssUtilsTest {
   @Test
   public void testShuffleBitmapToPartitionBitmap() {
     Roaring64NavigableMap partition1Bitmap =
-        Roaring64NavigableMap.bitmapOf(
-            getBlockId(0, 0), getBlockId(0, 1));
+        Roaring64NavigableMap.bitmapOf(getBlockId(0, 0), getBlockId(0, 1));
     Roaring64NavigableMap partition2Bitmap =
-        Roaring64NavigableMap.bitmapOf(
-            getBlockId(1, 0), getBlockId(1, 1));
+        Roaring64NavigableMap.bitmapOf(getBlockId(1, 0), getBlockId(1, 1));
     Roaring64NavigableMap shuffleBitmap = Roaring64NavigableMap.bitmapOf();
     shuffleBitmap.or(partition1Bitmap);
     shuffleBitmap.or(partition2Bitmap);

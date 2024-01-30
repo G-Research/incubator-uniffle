@@ -24,7 +24,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.uniffle.common.util.Constants;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.roaringbitmap.longlong.LongIterator;
@@ -34,6 +33,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.uniffle.client.util.ClientUtils;
 import org.apache.uniffle.client.util.DefaultIdHelper;
+import org.apache.uniffle.common.util.Constants;
 import org.apache.uniffle.common.util.RssUtils;
 
 import static org.apache.uniffle.client.util.ClientUtils.waitUntilDoneOrFail;
@@ -50,24 +50,39 @@ public class ClientUtilsTest {
   @Test
   public void getBlockIdTest() {
     // max value of blockId
-    assertEquals((1L << 63) - 1, ClientUtils.getBlockId(Constants.MAX_PARTITION_ID, Constants.MAX_SEQUENCE_NO));
+    assertEquals(
+        (1L << 63) - 1,
+        ClientUtils.getBlockId(Constants.MAX_PARTITION_ID, Constants.MAX_SEQUENCE_NO));
     // just a random test
     assertEquals((101L << 31) + 102L, ClientUtils.getBlockId(101, 102));
     // min value of blockId
     assertEquals(0L, ClientUtils.getBlockId(0, 0));
 
     final Throwable e1 =
-        assertThrows(IllegalArgumentException.class, () -> ClientUtils.getBlockId(Constants.MAX_PARTITION_ID + 1, 0));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ClientUtils.getBlockId(Constants.MAX_PARTITION_ID + 1, 0));
     assertTrue(
         e1.getMessage()
-            .contains("Can't support partitionId[" + (Constants.MAX_PARTITION_ID + 1) + "], " +
-                    "the max value should be " + Constants.MAX_PARTITION_ID));
+            .contains(
+                "Can't support partitionId["
+                    + (Constants.MAX_PARTITION_ID + 1)
+                    + "], "
+                    + "the max value should be "
+                    + Constants.MAX_PARTITION_ID));
 
     final Throwable e2 =
-        assertThrows(IllegalArgumentException.class, () -> ClientUtils.getBlockId(0, Constants.MAX_SEQUENCE_NO + 1));
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> ClientUtils.getBlockId(0, Constants.MAX_SEQUENCE_NO + 1));
     assertTrue(
-        e2.getMessage().contains("Can't support sequence[" + (Constants.MAX_SEQUENCE_NO + 1) + "], " +
-                "the max value should be " + Constants.MAX_SEQUENCE_NO));
+        e2.getMessage()
+            .contains(
+                "Can't support sequence["
+                    + (Constants.MAX_SEQUENCE_NO + 1)
+                    + "], "
+                    + "the max value should be "
+                    + Constants.MAX_SEQUENCE_NO));
   }
 
   @Test

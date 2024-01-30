@@ -732,8 +732,7 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
             Sets.newHashSet(0), bitmapBlockIds, Roaring64NavigableMap.bitmapOf());
     assertEquals(Roaring64NavigableMap.bitmapOf(0L), resultBlockIds);
 
-    long expectedBlockId =
-        getBlockId(Constants.MAX_PARTITION_ID, Constants.MAX_SEQUENCE_NO);
+    long expectedBlockId = getBlockId(Constants.MAX_PARTITION_ID, Constants.MAX_SEQUENCE_NO);
     bitmapBlockIds.addLong(expectedBlockId);
     resultBlockIds =
         shuffleTaskManager.getBlockIdsByPartitionId(
