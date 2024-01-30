@@ -54,7 +54,7 @@ public class ClientUtilsTest {
         (1L << 63) - 1,
         ClientUtils.getBlockId(Constants.MAX_PARTITION_ID, Constants.MAX_SEQUENCE_NO));
     // just a random test
-    assertEquals((101L << 31) + 102L, ClientUtils.getBlockId(101, 102));
+    assertEquals((101L << 31) + 102L, ClientUtils.getBlockId(102, 101));
     // min value of blockId
     assertEquals(0L, ClientUtils.getBlockId(0, 0));
 
