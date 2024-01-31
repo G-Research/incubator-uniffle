@@ -900,7 +900,6 @@
               <!-- test fails because I have German locale and expected strings are sensitive to that -->
               <exclude>**/CLIContentUtilsTest.java</exclude>
 
-              <exclude>**/ShuffleReadClientImplTest.java</exclude>
               <exclude>**/WriteBufferManagerTest.java</exclude>
               <exclude>**/ShuffleTaskManagerTest.java</exclude>
               <exclude>**/ShuffleServerWithLocalOfLocalOrderTest.java</exclude>
