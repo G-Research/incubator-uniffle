@@ -24,6 +24,7 @@ public class DefaultIdHelper implements IdHelper {
   @Override
   public long getTaskAttemptId(long blockId) {
     // taskAttemptId has been removed from blockId, here partitionId serves as a proxy
+    // TODO: make this redundant
     return blockId & Constants.MAX_PARTITION_ID;
   }
 }
