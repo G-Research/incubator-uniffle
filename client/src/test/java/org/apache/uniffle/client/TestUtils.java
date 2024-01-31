@@ -18,6 +18,7 @@
 package org.apache.uniffle.client;
 
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,14 +37,19 @@ public class TestUtils {
   private TestUtils() {}
 
   public static void validateResult(ShuffleReadClient readClient, Map<Long, byte[]> expectedData) {
+    Map<Long, byte[]> pendingData = new HashMap<>(expectedData);
+
     ByteBuffer data = readClient.readShuffleBlockData().getByteBuffer();
     int blockNum = 0;
+    int expectedBlockNum = expectedData.size();
     while (data != null) {
       blockNum++;
       boolean match = false;
-      for (byte[] expected : expectedData.values()) {
-        if (compareByte(expected, data)) {
+      for (Map.Entry<Long, byte[]> expected : pendingData.entrySet()) {
+        if (compareByte(expected.getValue(), data)) {
           match = true;
+          pendingData.remove(expected.getKey());
+          break;
         }
       }
       assertTrue(match);
@@ -54,7 +60,8 @@ public class TestUtils {
         data = csb.getByteBuffer();
       }
     }
-    assertEquals(expectedData.size(), blockNum);
+    assertEquals(expectedBlockNum, blockNum);
+    assertEquals(pendingData.size(), 0);
   }
 
   public static void validateResult(Map<Long, byte[]> expectedData, ShuffleDataResult sdr) {
