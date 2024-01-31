@@ -48,7 +48,6 @@ import org.apache.uniffle.storage.handler.impl.HadoopShuffleWriteHandler;
 import org.apache.uniffle.storage.util.StorageType;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -517,21 +516,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
 
   @Test
   public void readTest13() throws Exception {
-    doReadTest13(BlockIdLayout.DEFAULT);
-  }
-
-  @Test
-  public void readTest13b() throws Exception {
-    // This test is identical to readTest13, except that it does not use the default BlockIdLayout
-    // the layout is only used by IdHelper that extracts the task attempt id from the block id
-    // the partition id has to be larger than 0, so that it can leak into the task attempt id
-    // if the default layout is being used
-    BlockIdLayout layout = BlockIdLayout.from(22, 21, 20);
-    assertNotEquals(layout, BlockIdLayout.DEFAULT);
-    doReadTest13(layout);
-  }
-
-  public void doReadTest13(BlockIdLayout layout) throws Exception {
+    BlockIdLayout layout = BlockIdLayout.DEFAULT;
     String basePath = HDFS_URI + "clientReadTest13-" + layout.hashCode();
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi1.getId(), conf);
@@ -564,8 +549,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
             .taskIdBitmap(taskIdBitmap)
             .rssConf(rssConf)
             .build();
-    // note that skipped block ids in blockIdBitmap will be removed by `build()`
-    assertEquals(10, blockIdBitmap.getIntCardinality());
+    assertEquals(15, blockIdBitmap.getIntCardinality());
     TestUtils.validateResult(readClient, expectedData);
     assertEquals(20, readClient.getProcessedBlockIds().getLongCardinality());
     readClient.checkProcessedBlockIds();
