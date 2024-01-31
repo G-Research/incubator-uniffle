@@ -263,8 +263,8 @@ public class ShuffleServerWithLocalOfLocalOrderTest extends ShuffleReadWriteBase
             .filter(x -> expectedBlockIds4.contains(x.getKey()))
             .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
     taskIds = Roaring64NavigableMap.bitmapOf();
-    for (long blockId : expectedBlockIds4) {
-      taskIds.add(new DefaultIdHelper().getTaskAttemptId(blockId));
+    for (ShuffleBlockInfo sbi : partitionToBlocks.get(0)) {
+      taskIds.add(sbi.getTaskAttemptId());
     }
     sdr =
         readShuffleData(
