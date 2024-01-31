@@ -65,6 +65,7 @@ public interface ShuffleWriteClient {
       Map<Integer, List<ShuffleServerInfo>> partitionToServers,
       String appId,
       int shuffleId,
+      int mapIndex,
       long taskAttemptId,
       Map<Integer, List<Long>> partitionToBlockIds,
       int bitmapNum);
