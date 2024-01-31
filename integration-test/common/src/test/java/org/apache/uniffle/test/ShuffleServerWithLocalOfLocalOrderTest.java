@@ -141,27 +141,27 @@ public class ShuffleServerWithLocalOfLocalOrderTest extends ShuffleReadWriteBase
     // key: mapIdx
     Map<Integer, List<ShuffleBlockInfo>> p0 = new HashMap<>();
     List<ShuffleBlockInfo> blocks1 =
-        createShuffleBlockList(0, 0, 0, 3, 25, bitmaps[0], expectedData, mockSSI);
+        createShuffleBlockList(0, 0, 0, 0, 3, 25, bitmaps[0], expectedData, mockSSI);
     List<ShuffleBlockInfo> blocks2 =
-        createShuffleBlockList(0, 0, 1, 3, 25, bitmaps[0], expectedData, mockSSI);
+        createShuffleBlockList(0, 1, 0, 1, 3, 25, bitmaps[0], expectedData, mockSSI);
     List<ShuffleBlockInfo> blocks3 =
-        createShuffleBlockList(0, 0, 2, 3, 25, bitmaps[0], expectedData, mockSSI);
+        createShuffleBlockList(0, 2, 0, 2, 3, 25, bitmaps[0], expectedData, mockSSI);
     p0.put(0, blocks1);
     p0.put(1, blocks2);
     p0.put(2, blocks3);
 
     final List<ShuffleBlockInfo> blocks4 =
-        createShuffleBlockList(0, 1, 1, 5, 25, bitmaps[1], expectedData, mockSSI);
+        createShuffleBlockList(0, 1, 1, 1, 5, 25, bitmaps[1], expectedData, mockSSI);
     final Map<Integer, List<ShuffleBlockInfo>> p1 = new HashMap<>();
     p1.put(1, blocks4);
 
     final List<ShuffleBlockInfo> blocks5 =
-        createShuffleBlockList(0, 2, 2, 4, 25, bitmaps[2], expectedData, mockSSI);
+        createShuffleBlockList(0, 2, 2, 2, 4, 25, bitmaps[2], expectedData, mockSSI);
     final Map<Integer, List<ShuffleBlockInfo>> p2 = new HashMap<>();
     p2.put(2, blocks5);
 
     final List<ShuffleBlockInfo> blocks6 =
-        createShuffleBlockList(0, 3, 3, 1, 25, bitmaps[3], expectedData, mockSSI);
+        createShuffleBlockList(0, 3, 3, 3, 1, 25, bitmaps[3], expectedData, mockSSI);
     final Map<Integer, List<ShuffleBlockInfo>> p3 = new HashMap<>();
     p1.put(3, blocks6);
 
