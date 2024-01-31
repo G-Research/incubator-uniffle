@@ -229,20 +229,20 @@ public class WriteBufferManagerTest {
     when(mockWriterBuffer.getData()).thenReturn(new byte[] {});
     when(mockWriterBuffer.getMemoryUsed()).thenReturn(0);
     ShuffleBlockInfo sbi = wbm.createShuffleBlock(0, mockWriterBuffer);
-    // seqNo = 0, partitionId = 0, taskId = 0
+    // seqNo = 0, partitionId = 0
     assertEquals(0L, sbi.getBlockId());
 
-    // seqNo = 1, partitionId = 0, taskId = 0
+    // seqNo = 1, partitionId = 0
     sbi = wbm.createShuffleBlock(0, mockWriterBuffer);
-    assertEquals(35184372088832L, sbi.getBlockId());
+    assertEquals(2147483648L, sbi.getBlockId());
 
-    // seqNo = 0, partitionId = 1, taskId = 0
+    // seqNo = 0, partitionId = 1
     sbi = wbm.createShuffleBlock(1, mockWriterBuffer);
-    assertEquals(2097152L, sbi.getBlockId());
+    assertEquals(1L, sbi.getBlockId());
 
-    // seqNo = 1, partitionId = 1, taskId = 0
+    // seqNo = 1, partitionId = 1
     sbi = wbm.createShuffleBlock(1, mockWriterBuffer);
-    assertEquals(35184374185984L, sbi.getBlockId());
+    assertEquals(2147483649L, sbi.getBlockId());
   }
 
   @Test

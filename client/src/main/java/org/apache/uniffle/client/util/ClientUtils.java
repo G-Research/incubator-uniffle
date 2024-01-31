@@ -34,11 +34,10 @@ import org.apache.uniffle.storage.util.StorageType;
 
 public class ClientUtils {
 
-  // BlockId is long and composed of partitionId, executorId and AtomicInteger.
-  // AtomicInteger is first 19 bit, max value is 2^19 - 1
-  // partitionId is next 24 bit, max value is 2^24 - 1
-  // taskAttemptId is rest of 20 bit, max value is 2^20 - 1
-  public static Long getBlockId(long partitionId, long taskAttemptId, long atomicInt) {
+  // BlockId is positive long (63 bits used) and composed of partitionId and AtomicInteger.
+  // AtomicInteger is first 32 bit, max value is 2^31 - 1
+  // partitionId is rest of 31 bit, max value is 2^31 - 1
+  public static Long getBlockId(long partitionId, long atomicInt) {
     if (atomicInt < 0 || atomicInt > Constants.MAX_SEQUENCE_NO) {
       throw new IllegalArgumentException(
           "Can't support sequence["
@@ -53,16 +52,7 @@ public class ClientUtils {
               + "], the max value should be "
               + Constants.MAX_PARTITION_ID);
     }
-    if (taskAttemptId < 0 || taskAttemptId > Constants.MAX_TASK_ATTEMPT_ID) {
-      throw new IllegalArgumentException(
-          "Can't support taskAttemptId["
-              + taskAttemptId
-              + "], the max value should be "
-              + Constants.MAX_TASK_ATTEMPT_ID);
-    }
-    return (atomicInt << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH))
-        + (partitionId << Constants.TASK_ATTEMPT_ID_MAX_LENGTH)
-        + taskAttemptId;
+    return (atomicInt << Constants.PARTITION_ID_MAX_LENGTH) + partitionId;
   }
 
   public static RemoteStorageInfo fetchRemoteStorage(

@@ -111,7 +111,7 @@ public class LocalOrderSegmentSplitter implements SegmentSplitter {
                   + "This may happen when the data is flushing, please ignore.",
               totalLen,
               dataFileLen,
-              Math.toIntExact((blockId >> Constants.TASK_ATTEMPT_ID_MAX_LENGTH) & mask));
+              Math.toIntExact(blockId & mask));
           break;
         }
 

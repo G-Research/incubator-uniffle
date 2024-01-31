@@ -204,7 +204,7 @@ public class ShuffleWithRssClientTest extends ShuffleReadWriteBase {
 
     int partitionIdx = 1;
     for (int i = 0; i < 5; i++) {
-      blockIds.add(ClientUtils.getBlockId(partitionIdx, 0, i));
+      blockIds.add(ClientUtils.getBlockId(partitionIdx, i));
     }
     partitionToBlocks.put(partitionIdx, blockIds);
 
@@ -253,12 +253,12 @@ public class ShuffleWithRssClientTest extends ShuffleReadWriteBase {
     Map<Integer, List<Long>> partitionToBlocks = Maps.newHashMap();
     List<Long> blockIds = Lists.newArrayList();
     for (int i = 0; i < 5; i++) {
-      blockIds.add(ClientUtils.getBlockId(1, 0, i));
+      blockIds.add(ClientUtils.getBlockId(1, i));
     }
     partitionToBlocks.put(1, blockIds);
     blockIds = Lists.newArrayList();
     for (int i = 0; i < 7; i++) {
-      blockIds.add(ClientUtils.getBlockId(2, 0, i));
+      blockIds.add(ClientUtils.getBlockId(2, i));
     }
     partitionToBlocks.put(2, blockIds);
     shuffleWriteClientImpl.reportShuffleResult(

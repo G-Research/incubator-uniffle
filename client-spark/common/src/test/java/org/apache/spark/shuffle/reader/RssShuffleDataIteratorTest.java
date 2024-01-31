@@ -81,7 +81,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
 
     validateResult(rssShuffleDataIterator, expectedData, 10);
 
-    blockIdBitmap.add(ClientUtils.getBlockId(0, 0, Constants.MAX_SEQUENCE_NO));
+    blockIdBitmap.add(ClientUtils.getBlockId(0, Constants.MAX_SEQUENCE_NO));
     rssShuffleDataIterator =
         getDataIterator(basePath, blockIdBitmap, taskIdBitmap, Lists.newArrayList(ssi1));
     int recNum = 0;
