@@ -57,6 +57,7 @@ import org.apache.uniffle.client.request.RssFinishShuffleRequest;
 import org.apache.uniffle.client.request.RssGetShuffleAssignmentsRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultRequest;
+import org.apache.uniffle.client.request.RssGetShuffleTaskAttemptIdsRequest;
 import org.apache.uniffle.client.request.RssOfferShuffleResultRequest;
 import org.apache.uniffle.client.request.RssRegisterShuffleRequest;
 import org.apache.uniffle.client.request.RssSendCommitRequest;
@@ -72,6 +73,7 @@ import org.apache.uniffle.client.response.RssFetchRemoteStorageResponse;
 import org.apache.uniffle.client.response.RssFinishShuffleResponse;
 import org.apache.uniffle.client.response.RssGetShuffleAssignmentsResponse;
 import org.apache.uniffle.client.response.RssGetShuffleResultResponse;
+import org.apache.uniffle.client.response.RssGetShuffleTaskAttemptIdsResponse;
 import org.apache.uniffle.client.response.RssOfferShuffleResultResponse;
 import org.apache.uniffle.client.response.RssRegisterShuffleResponse;
 import org.apache.uniffle.client.response.RssSendCommitResponse;
@@ -967,6 +969,50 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
           "Get shuffle result is failed for appId[" + appId + "], shuffleId[" + shuffleId + "]");
     }
     return blockIdBitmap;
+  }
+
+  @Override
+  public Roaring64NavigableMap getShuffleTaskAttemptIds(
+      String clientType, Set<ShuffleServerInfo> shuffleServerInfoSet, String appId, int shuffleId) {
+    RssGetShuffleTaskAttemptIdsRequest request =
+        new RssGetShuffleTaskAttemptIdsRequest(appId, shuffleId);
+    boolean isSuccessful = false;
+    Roaring64NavigableMap taskAttemptIdBitmap = Roaring64NavigableMap.bitmapOf();
+    int successCnt = 0;
+    for (ShuffleServerInfo ssi : shuffleServerInfoSet) {
+      try {
+        RssGetShuffleTaskAttemptIdsResponse response =
+            getShuffleServerClient(ssi).getShuffleTaskAttemptIds(request);
+        if (response.getStatusCode() == StatusCode.SUCCESS) {
+          // merge into taskAttemptIds from multiple servers.
+          Roaring64NavigableMap taskAttemptIdBitmapOfServer = response.getTaskAttemptIdBitmap();
+          taskAttemptIdBitmap.or(taskAttemptIdBitmapOfServer);
+          successCnt++;
+          if (successCnt >= replicaRead) {
+            isSuccessful = true;
+            break;
+          }
+        }
+      } catch (Exception e) {
+        LOG.warn(
+            "Get shuffle taskAttemptIds is failed from "
+                + ssi
+                + " for appId["
+                + appId
+                + "], shuffleId["
+                + shuffleId
+                + "]");
+      }
+    }
+    if (!isSuccessful) {
+      throw new RssFetchFailedException(
+          "Get shuffle taskAttemptIds is failed for appId["
+              + appId
+              + "], shuffleId["
+              + shuffleId
+              + "]");
+    }
+    return taskAttemptIdBitmap;
   }
 
   @Override
