@@ -50,8 +50,8 @@ import org.apache.uniffle.common.rpc.StatusCode;
 import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.storage.util.StorageType;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TopNShuffleDataSizeOfAppCalcTaskTest {
   private static final Logger LOG =
@@ -218,12 +218,8 @@ public class TopNShuffleDataSizeOfAppCalcTaskTest {
             "[\"application_id_4\"]",
             "[\"application_id_3\"]",
             "[\"application_id_2\"]");
-    assertTrue(
-        expectedTopNApps.containsAll(topNTotalDataSizeApps)
-            && expectedTopNApps.size() == topNTotalDataSizeApps.size());
-    assertTrue(
-        expectedTopNApps.containsAll(topNInMemoryDataSizeApps)
-            && expectedTopNApps.size() == topNInMemoryDataSizeApps.size());
+    assertEquals(expectedTopNApps, topNTotalDataSizeApps);
+    assertEquals(expectedTopNApps, topNInMemoryDataSizeApps);
   }
 
   @AfterAll
