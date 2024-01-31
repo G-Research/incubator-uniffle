@@ -837,7 +837,7 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
       }
     }
     assertEquals(
-        (endPartition - startPartition + 1) * taskNum * blocksPerTask,
+        (endPartition - startPartition + 1) * blocksPerTask,
         expectedBlockIds.getLongCardinality());
 
     shuffleTaskManager.addFinishedBlockIds(appId, shuffleId, blockIdsToReport, bitNum);
