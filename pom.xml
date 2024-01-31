@@ -900,9 +900,7 @@
               <!-- test fails because I have German locale and expected strings are sensitive to that -->
               <exclude>**/CLIContentUtilsTest.java</exclude>
 
-              <exclude>**/ShuffleTaskManagerTest.java</exclude>
               <exclude>**/ShuffleServerWithLocalOfLocalOrderTest.java</exclude>
-              <exclude>**/DiskErrorToleranceTest.java</exclude>
               <exclude>**/WriteAndReadMetricsTest.java</exclude>
               <exclude>**/RepartitionWithMemoryRssTest.java</exclude>
               <exclude>**/ShuffleUnregisterWithLocalfileTest.java</exclude>
@@ -923,8 +921,12 @@
               <exclude>**/AQESkewedJoinWithLocalOrderTest.java</exclude>
               <exclude>**/ContinuousSelectPartitionStrategyTest.java</exclude>
               <exclude>**/GetShuffleReportForMultiPartTest.java</exclude>
+              <exclude>**/DiskErrorToleranceTest.java</exclude>
 
-              <!-- does not fail in IntelliJ -->
+              <!-- does not finish on command line -->
+              <exclude>**/RepartitionWithMemoryRssTest.java</exclude>
+
+              <!-- does not fail in IntelliJ or run individually -->
               <exclude>**/TopNShuffleDataSizeOfAppCalcTaskTest.java</exclude>
             </excludes>
           </configuration>
