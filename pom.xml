@@ -893,11 +893,13 @@
               <exclude>**/DynamicClientConfServiceKerberlizedHadoopTest.java</exclude>
               <exclude>**/ShuffleServerWithKerberizedHadoopTest.java</exclude>
 
+              <!-- test fails because my filesytem at /tmp is too full -->
               <exclude>**/LocalStorageTest.java</exclude>
+              <!-- test fails because I have an SSD disk not HDD -->
               <exclude>**/LocalStorageManagerTest.java</exclude>
+              <!-- test fails because I have German locale and expected strings are sensitive to that -->
               <exclude>**/CLIContentUtilsTest.java</exclude>
-              <exclude>**/TopNShuffleDataSizeOfAppCalcTaskTest.java</exclude>
-              <exclude>**/ClientUtilsTest.java</exclude>
+
               <exclude>**/ShuffleReadClientImplTest.java</exclude>
               <exclude>**/WriteBufferManagerTest.java</exclude>
               <exclude>**/ShuffleTaskManagerTest.java</exclude>
@@ -924,6 +926,9 @@
               <exclude>**/AQESkewedJoinWithLocalOrderTest.java</exclude>
               <exclude>**/ContinuousSelectPartitionStrategyTest.java</exclude>
               <exclude>**/GetShuffleReportForMultiPartTest.java</exclude>
+
+              <!-- does not fail in IntelliJ -->
+              <exclude>**/TopNShuffleDataSizeOfAppCalcTaskTest.java</exclude>
             </excludes>
           </configuration>
         </plugin>
