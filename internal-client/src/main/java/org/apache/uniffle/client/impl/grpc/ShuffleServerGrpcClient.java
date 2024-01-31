@@ -35,12 +35,14 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.uniffle.client.api.ShuffleServerClient;
 import org.apache.uniffle.client.request.RssAppHeartBeatRequest;
+import org.apache.uniffle.client.request.RssCommitShuffleResultRequest;
 import org.apache.uniffle.client.request.RssFinishShuffleRequest;
 import org.apache.uniffle.client.request.RssGetInMemoryShuffleDataRequest;
 import org.apache.uniffle.client.request.RssGetShuffleDataRequest;
 import org.apache.uniffle.client.request.RssGetShuffleIndexRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultRequest;
+import org.apache.uniffle.client.request.RssOfferShuffleResultRequest;
 import org.apache.uniffle.client.request.RssRegisterShuffleRequest;
 import org.apache.uniffle.client.request.RssReportShuffleResultRequest;
 import org.apache.uniffle.client.request.RssSendCommitRequest;
@@ -48,11 +50,13 @@ import org.apache.uniffle.client.request.RssSendShuffleDataRequest;
 import org.apache.uniffle.client.request.RssUnregisterShuffleByAppIdRequest;
 import org.apache.uniffle.client.request.RssUnregisterShuffleRequest;
 import org.apache.uniffle.client.response.RssAppHeartBeatResponse;
+import org.apache.uniffle.client.response.RssCommitShuffleResultResponse;
 import org.apache.uniffle.client.response.RssFinishShuffleResponse;
 import org.apache.uniffle.client.response.RssGetInMemoryShuffleDataResponse;
 import org.apache.uniffle.client.response.RssGetShuffleDataResponse;
 import org.apache.uniffle.client.response.RssGetShuffleIndexResponse;
 import org.apache.uniffle.client.response.RssGetShuffleResultResponse;
+import org.apache.uniffle.client.response.RssOfferShuffleResultResponse;
 import org.apache.uniffle.client.response.RssRegisterShuffleResponse;
 import org.apache.uniffle.client.response.RssReportShuffleResultResponse;
 import org.apache.uniffle.client.response.RssSendCommitResponse;
@@ -76,6 +80,8 @@ import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.proto.RssProtos;
 import org.apache.uniffle.proto.RssProtos.AppHeartBeatRequest;
 import org.apache.uniffle.proto.RssProtos.AppHeartBeatResponse;
+import org.apache.uniffle.proto.RssProtos.CommitShuffleResultRequest;
+import org.apache.uniffle.proto.RssProtos.CommitShuffleResultResponse;
 import org.apache.uniffle.proto.RssProtos.FinishShuffleRequest;
 import org.apache.uniffle.proto.RssProtos.FinishShuffleResponse;
 import org.apache.uniffle.proto.RssProtos.GetLocalShuffleDataRequest;
@@ -88,6 +94,8 @@ import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultResponse;
+import org.apache.uniffle.proto.RssProtos.OfferShuffleResultRequest;
+import org.apache.uniffle.proto.RssProtos.OfferShuffleResultResponse;
 import org.apache.uniffle.proto.RssProtos.PartitionToBlockIds;
 import org.apache.uniffle.proto.RssProtos.RemoteStorage;
 import org.apache.uniffle.proto.RssProtos.RemoteStorageConfItem;
@@ -712,6 +720,136 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
     }
     throw new RssException(
         "Report shuffle result to host[" + host + "], port[" + port + "] failed");
+  }
+
+  @Override
+  public RssOfferShuffleResultResponse offerShuffleResult(RssOfferShuffleResultRequest request) {
+    OfferShuffleResultRequest recRequest =
+        OfferShuffleResultRequest.newBuilder()
+            .setAppId(request.getAppId())
+            .setShuffleId(request.getShuffleId())
+            .setMapIndex(request.getMapIndex())
+            .setTaskAttemptId(request.getTaskAttemptId())
+            .build();
+    OfferShuffleResultResponse rpcResponse = doOfferShuffleResult(recRequest);
+
+    RssProtos.StatusCode statusCode = rpcResponse.getStatus();
+    RssOfferShuffleResultResponse response;
+    switch (statusCode) {
+      case SUCCESS:
+        response = new RssOfferShuffleResultResponse(StatusCode.SUCCESS);
+        break;
+      default:
+        String msg =
+            "Can't offer shuffle result to "
+                + host
+                + ":"
+                + port
+                + " for [appId="
+                + request.getAppId()
+                + ", shuffleId="
+                + request.getShuffleId()
+                + ", errorMsg:"
+                + rpcResponse.getRetMsg();
+        LOG.error(msg);
+        throw new RssException(msg);
+    }
+
+    return response;
+  }
+
+  private OfferShuffleResultResponse doOfferShuffleResult(OfferShuffleResultRequest rpcRequest) {
+    int retryNum = 0;
+    while (retryNum < maxRetryAttempts) {
+      try {
+        OfferShuffleResultResponse response = getBlockingStub().offerShuffleResult(rpcRequest);
+        return response;
+      } catch (Exception e) {
+        retryNum++;
+        LOG.warn(
+            "Offer shuffle result to host["
+                + host
+                + "], port["
+                + port
+                + "] failed, try again, retryNum["
+                + retryNum
+                + "]",
+            e);
+      }
+    }
+    throw new RssException("Offer shuffle result to host[" + host + "], port[" + port + "] failed");
+  }
+
+  @Override
+  public RssCommitShuffleResultResponse commitShuffleResult(RssCommitShuffleResultRequest request) {
+    List<PartitionToBlockIds> partitionToBlockIds = Lists.newArrayList();
+    for (Map.Entry<Integer, List<Long>> entry : request.getPartitionToBlockIds().entrySet()) {
+      List<Long> blockIds = entry.getValue();
+      if (blockIds != null && !blockIds.isEmpty()) {
+        partitionToBlockIds.add(
+            PartitionToBlockIds.newBuilder()
+                .setPartitionId(entry.getKey())
+                .addAllBlockIds(entry.getValue())
+                .build());
+      }
+    }
+
+    CommitShuffleResultRequest recRequest =
+        CommitShuffleResultRequest.newBuilder()
+            .setAppId(request.getAppId())
+            .setShuffleId(request.getShuffleId())
+            .setTaskAttemptId(request.getTaskAttemptId())
+            .setBitmapNum(request.getBitmapNum())
+            .addAllPartitionToBlockIds(partitionToBlockIds)
+            .build();
+    CommitShuffleResultResponse rpcResponse = doCommitShuffleResult(recRequest);
+
+    RssProtos.StatusCode statusCode = rpcResponse.getStatus();
+    RssCommitShuffleResultResponse response;
+    switch (statusCode) {
+      case SUCCESS:
+        response = new RssCommitShuffleResultResponse(StatusCode.SUCCESS);
+        break;
+      default:
+        String msg =
+            "Can't commit shuffle result to "
+                + host
+                + ":"
+                + port
+                + " for [appId="
+                + request.getAppId()
+                + ", shuffleId="
+                + request.getShuffleId()
+                + ", errorMsg:"
+                + rpcResponse.getRetMsg();
+        LOG.error(msg);
+        throw new RssException(msg);
+    }
+
+    return response;
+  }
+
+  private CommitShuffleResultResponse doCommitShuffleResult(CommitShuffleResultRequest rpcRequest) {
+    int retryNum = 0;
+    while (retryNum < maxRetryAttempts) {
+      try {
+        CommitShuffleResultResponse response = getBlockingStub().commitShuffleResult(rpcRequest);
+        return response;
+      } catch (Exception e) {
+        retryNum++;
+        LOG.warn(
+            "Commit shuffle result to host["
+                + host
+                + "], port["
+                + port
+                + "] failed, try again, retryNum["
+                + retryNum
+                + "]",
+            e);
+      }
+    }
+    throw new RssException(
+        "Commit shuffle result to host[" + host + "], port[" + port + "] failed");
   }
 
   @Override

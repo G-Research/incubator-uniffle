@@ -33,6 +33,8 @@ service ShuffleServer {
   rpc getMemoryShuffleData (GetMemoryShuffleDataRequest) returns (GetMemoryShuffleDataResponse);
   rpc commitShuffleTask (ShuffleCommitRequest) returns (ShuffleCommitResponse);
   rpc reportShuffleResult (ReportShuffleResultRequest) returns (ReportShuffleResultResponse);
+  rpc offerShuffleResult (OfferShuffleResultRequest) returns (OfferShuffleResultResponse);
+  rpc commitShuffleResult (CommitShuffleResultRequest) returns (CommitShuffleResultResponse);
   rpc getShuffleResult (GetShuffleResultRequest) returns (GetShuffleResultResponse);
   rpc getShuffleResultForMultiPart (GetShuffleResultForMultiPartRequest) returns (GetShuffleResultForMultiPartResponse);
   rpc finishShuffle (FinishShuffleRequest) returns (FinishShuffleResponse);
@@ -135,6 +137,32 @@ message PartitionToBlockIds {
 }
 
 message ReportShuffleResultResponse {
+  StatusCode status = 1;
+  string retMsg = 2;
+}
+
+message OfferShuffleResultRequest {
+  string appId = 1;
+  int32 shuffleId = 2;
+  int32 mapIndex = 3;
+  int64 taskAttemptId = 4;
+}
+
+message OfferShuffleResultResponse {
+  StatusCode status = 1;
+  string retMsg = 2;
+}
+
+message CommitShuffleResultRequest {
+  string appId = 1;
+  int32 shuffleId = 2;
+  int32 mapIndex = 3;
+  int64 taskAttemptId = 4;
+  int32 bitmapNum = 5;
+  repeated PartitionToBlockIds partitionToBlockIds = 6;
+}
+
+message CommitShuffleResultResponse {
   StatusCode status = 1;
   string retMsg = 2;
 }
