@@ -37,6 +37,7 @@ service ShuffleServer {
   rpc commitShuffleResult (CommitShuffleResultRequest) returns (CommitShuffleResultResponse);
   rpc getShuffleResult (GetShuffleResultRequest) returns (GetShuffleResultResponse);
   rpc getShuffleResultForMultiPart (GetShuffleResultForMultiPartRequest) returns (GetShuffleResultForMultiPartResponse);
+  rpc getShuffleTaskAttemptIds (GetShuffleTaskAttemptIdsRequest) returns (GetShuffleTaskAttemptIdsResponse);
   rpc finishShuffle (FinishShuffleRequest) returns (FinishShuffleResponse);
   rpc requireBuffer (RequireBufferRequest) returns (RequireBufferResponse);
   rpc appHeartbeat(AppHeartBeatRequest) returns (AppHeartBeatResponse);
@@ -186,6 +187,17 @@ message GetShuffleResultForMultiPartRequest {
 }
 
 message GetShuffleResultForMultiPartResponse {
+  StatusCode status = 1;
+  string retMsg = 2;
+  bytes serializedBitmap = 3;
+}
+
+message GetShuffleTaskAttemptIdsRequest {
+  string appId = 1;
+  int32 shuffleId = 2;
+}
+
+message GetShuffleTaskAttemptIdsResponse {
   StatusCode status = 1;
   string retMsg = 2;
   bytes serializedBitmap = 3;

@@ -42,6 +42,7 @@ import org.apache.uniffle.client.request.RssGetShuffleDataRequest;
 import org.apache.uniffle.client.request.RssGetShuffleIndexRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultRequest;
+import org.apache.uniffle.client.request.RssGetShuffleTaskAttemptIdsRequest;
 import org.apache.uniffle.client.request.RssOfferShuffleResultRequest;
 import org.apache.uniffle.client.request.RssRegisterShuffleRequest;
 import org.apache.uniffle.client.request.RssReportShuffleResultRequest;
@@ -56,6 +57,7 @@ import org.apache.uniffle.client.response.RssGetInMemoryShuffleDataResponse;
 import org.apache.uniffle.client.response.RssGetShuffleDataResponse;
 import org.apache.uniffle.client.response.RssGetShuffleIndexResponse;
 import org.apache.uniffle.client.response.RssGetShuffleResultResponse;
+import org.apache.uniffle.client.response.RssGetShuffleTaskAttemptIdsResponse;
 import org.apache.uniffle.client.response.RssOfferShuffleResultResponse;
 import org.apache.uniffle.client.response.RssRegisterShuffleResponse;
 import org.apache.uniffle.client.response.RssReportShuffleResultResponse;
@@ -94,6 +96,8 @@ import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultResponse;
+import org.apache.uniffle.proto.RssProtos.GetShuffleTaskAttemptIdsRequest;
+import org.apache.uniffle.proto.RssProtos.GetShuffleTaskAttemptIdsResponse;
 import org.apache.uniffle.proto.RssProtos.OfferShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.OfferShuffleResultResponse;
 import org.apache.uniffle.proto.RssProtos.PartitionToBlockIds;
@@ -920,6 +924,48 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
       default:
         String msg =
             "Can't get shuffle result from "
+                + host
+                + ":"
+                + port
+                + " for [appId="
+                + request.getAppId()
+                + ", shuffleId="
+                + request.getShuffleId()
+                + ", errorMsg:"
+                + rpcResponse.getRetMsg();
+        LOG.error(msg);
+        throw new RssFetchFailedException(msg);
+    }
+
+    return response;
+  }
+
+  @Override
+  public RssGetShuffleTaskAttemptIdsResponse getShuffleTaskAttemptIds(
+      RssGetShuffleTaskAttemptIdsRequest request) {
+    GetShuffleTaskAttemptIdsRequest rpcRequest =
+        GetShuffleTaskAttemptIdsRequest.newBuilder()
+            .setAppId(request.getAppId())
+            .setShuffleId(request.getShuffleId())
+            .build();
+    GetShuffleTaskAttemptIdsResponse rpcResponse =
+        getBlockingStub().getShuffleTaskAttemptIds(rpcRequest);
+    RssProtos.StatusCode statusCode = rpcResponse.getStatus();
+
+    RssGetShuffleTaskAttemptIdsResponse response;
+    switch (statusCode) {
+      case SUCCESS:
+        try {
+          response =
+              new RssGetShuffleTaskAttemptIdsResponse(
+                  StatusCode.SUCCESS, rpcResponse.getSerializedBitmap().toByteArray());
+        } catch (Exception e) {
+          throw new RssException(e);
+        }
+        break;
+      default:
+        String msg =
+            "Can't get shuffle taskAttemptIds from "
                 + host
                 + ":"
                 + port

@@ -70,6 +70,7 @@ import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultResponse;
+import org.apache.uniffle.proto.RssProtos.GetShuffleTaskAttemptIdsResponse;
 import org.apache.uniffle.proto.RssProtos.OfferShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.OfferShuffleResultResponse;
 import org.apache.uniffle.proto.RssProtos.PartitionToBlockIds;
@@ -688,6 +689,45 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
 
     reply =
         GetShuffleResultForMultiPartResponse.newBuilder()
+            .setStatus(status.toProto())
+            .setRetMsg(msg)
+            .setSerializedBitmap(serializedBlockIdsBytes)
+            .build();
+    responseObserver.onNext(reply);
+    responseObserver.onCompleted();
+  }
+
+  @Override
+  public void getShuffleTaskAttemptIds(
+      RssProtos.GetShuffleTaskAttemptIdsRequest request,
+      StreamObserver<RssProtos.GetShuffleTaskAttemptIdsResponse> responseObserver) {
+    String appId = request.getAppId();
+    int shuffleId = request.getShuffleId();
+    StatusCode status = StatusCode.SUCCESS;
+    String msg = "OK";
+    GetShuffleTaskAttemptIdsResponse reply;
+    byte[] serializedBlockIds = null;
+    String requestInfo = "appId[" + appId + "], shuffleId[" + shuffleId + "]";
+    ByteString serializedBlockIdsBytes = ByteString.EMPTY;
+
+    try {
+      serializedBlockIds =
+          shuffleServer.getShuffleTaskManager().getTaskAttemptIds(appId, shuffleId);
+      if (serializedBlockIds == null) {
+        status = StatusCode.INTERNAL_ERROR;
+        msg = "Can't get shuffle taskAttemptIds for " + requestInfo;
+        LOG.warn(msg);
+      } else {
+        serializedBlockIdsBytes = UnsafeByteOperations.unsafeWrap(serializedBlockIds);
+      }
+    } catch (Exception e) {
+      status = StatusCode.INTERNAL_ERROR;
+      msg = e.getMessage();
+      LOG.error("Error happened when get shuffle taskAttemptIds for {}", requestInfo, e);
+    }
+
+    reply =
+        GetShuffleTaskAttemptIdsResponse.newBuilder()
             .setStatus(status.toProto())
             .setRetMsg(msg)
             .setSerializedBitmap(serializedBlockIdsBytes)

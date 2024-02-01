@@ -108,6 +108,8 @@ public class ShuffleTaskManager {
   private Map<String, Map<Integer, Roaring64NavigableMap[]>> partitionsToBlockIds;
   // appId -> shuffleId -> mapIndex -> taskAttemptId offers
   private Map<String, Map<Integer, Map<Integer, Long>>> offeredMapIndexToTaskAttemptIds;
+  // appId -> shuffleId -> taskAttemptIds commits
+  private Map<String, Map<Integer, Roaring64NavigableMap>> committedTaskAttemptIds;
   private final ShuffleBufferManager shuffleBufferManager;
   private Map<String, ShuffleTaskInfo> shuffleTaskInfos = JavaUtils.newConcurrentMap();
   private Map<Long, PreAllocatedBufferInfo> requireBufferIds = JavaUtils.newConcurrentMap();
@@ -441,6 +443,14 @@ public class ShuffleTaskManager {
       int bitmapNum) {
     refreshAppId(appId);
 
+    // get taskAttemptIds of this shuffle
+    Map<Integer, Roaring64NavigableMap> shuffleIdToPartitions = committedTaskAttemptIds.get(appId);
+    if (shuffleIdToPartitions == null) {
+      throw new RssException("appId[" + appId + "] is expired!");
+    }
+    shuffleIdToPartitions.computeIfAbsent(shuffleId, key -> new Roaring64NavigableMap());
+    Roaring64NavigableMap taskAttemptIds = shuffleIdToPartitions.get(shuffleId);
+
     // TODO: remove this barrier to allow committing to all servers
     // we should trust the client to not commit without quorum
     // which would allow the map task that has quorum to commit on all servers
@@ -452,7 +462,9 @@ public class ShuffleTaskManager {
     shuffleIdToOffers.computeIfAbsent(shuffleId, key -> JavaUtils.newConcurrentMap());
     Map<Integer, Long> offeredMapIndexToTaskAttemptIds = shuffleIdToOffers.get(shuffleId);
     Long offered = offeredMapIndexToTaskAttemptIds.get(mapIndex);
-    if (offered == null || offered != taskAttemptId) {
+    // if there is no offer, it might have been committed already,
+    // or another taskAttemptId offer has been accepted
+    if (offered == null && !taskAttemptIds.contains(taskAttemptId) || offered != taskAttemptId) {
       throw new RssException(
           "committing taskAttempId["
               + taskAttemptId
@@ -461,7 +473,31 @@ public class ShuffleTaskManager {
               + "] has not been granted!");
     }
 
+    // memorize taskAttempId to answer getTaskAttemptIds
+    synchronized (taskAttemptIds) {
+      taskAttemptIds.addLong(taskAttemptId);
+    }
+
+    // remove offer
+    offeredMapIndexToTaskAttemptIds.remove(mapIndex);
+
+    // now we are safe to add the finished block ids
     addFinishedBlockIds(appId, shuffleId, partitionToBlockIds, bitmapNum);
+  }
+
+  public byte[] getTaskAttemptIds(String appId, Integer shuffleId) throws IOException {
+    refreshAppId(appId);
+
+    // get taskAttemptIds of this shuffle
+    Map<Integer, Roaring64NavigableMap> shuffleIdToPartitions = committedTaskAttemptIds.get(appId);
+    if (shuffleIdToPartitions == null) {
+      throw new RssException("appId[" + appId + "] is expired!");
+    }
+    shuffleIdToPartitions.computeIfAbsent(shuffleId, key -> new Roaring64NavigableMap());
+    Roaring64NavigableMap taskAttemptIds = shuffleIdToPartitions.get(shuffleId);
+
+    // it should be safe to serialize this because all commits have been done by now
+    return RssUtils.serializeBitMap(taskAttemptIds);
   }
 
   public int updateAndGetCommitCount(String appId, int shuffleId) {

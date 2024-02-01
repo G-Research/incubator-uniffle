@@ -21,12 +21,10 @@ public class RssGetShuffleTaskAttemptIdsRequest {
 
   private String appId;
   private int shuffleId;
-  private int partitionId;
 
-  public RssGetShuffleTaskAttemptIdsRequest(String appId, int shuffleId, int partitionId) {
+  public RssGetShuffleTaskAttemptIdsRequest(String appId, int shuffleId) {
     this.appId = appId;
     this.shuffleId = shuffleId;
-    this.partitionId = partitionId;
   }
 
   public String getAppId() {
@@ -35,9 +33,5 @@ public class RssGetShuffleTaskAttemptIdsRequest {
 
   public int getShuffleId() {
     return shuffleId;
-  }
-
-  public int getPartitionId() {
-    return partitionId;
   }
 }
