@@ -126,6 +126,7 @@ public class ShuffleTaskManager {
     this.shuffleFlushManager = shuffleFlushManager;
     this.partitionsToBlockIds = JavaUtils.newConcurrentMap();
     this.offeredMapIndexToTaskAttemptIds = JavaUtils.newConcurrentMap();
+    this.committedTaskAttemptIds = JavaUtils.newConcurrentMap();
     this.shuffleBufferManager = shuffleBufferManager;
     this.storageManager = storageManager;
     this.appExpiredWithoutHB = conf.getLong(ShuffleServerConf.SERVER_APP_EXPIRED_WITHOUT_HEARTBEAT);
@@ -277,6 +278,7 @@ public class ShuffleTaskManager {
 
       partitionsToBlockIds.computeIfAbsent(appId, key -> JavaUtils.newConcurrentMap());
       offeredMapIndexToTaskAttemptIds.computeIfAbsent(appId, key -> JavaUtils.newConcurrentMap());
+      committedTaskAttemptIds.computeIfAbsent(appId, key -> JavaUtils.newConcurrentMap());
       for (PartitionRange partitionRange : partitionRanges) {
         shuffleBufferManager.registerBuffer(
             appId, shuffleId, partitionRange.getStart(), partitionRange.getEnd());
@@ -420,7 +422,7 @@ public class ShuffleTaskManager {
     }
   }
 
-  public boolean offerTaskAttemptIdForMapIndex(
+  public Long offerTaskAttemptIdForMapIndex(
       String appId, Integer shuffleId, int mapIndex, long taskAttemptId) {
     refreshAppId(appId);
     Map<Integer, Map<Integer, Long>> shuffleIdToOffers = offeredMapIndexToTaskAttemptIds.get(appId);
@@ -429,9 +431,7 @@ public class ShuffleTaskManager {
     }
     shuffleIdToOffers.computeIfAbsent(shuffleId, key -> JavaUtils.newConcurrentMap());
     Map<Integer, Long> offeredMapIndexToTaskAttemptIds = shuffleIdToOffers.get(shuffleId);
-    Long existingTaskAttemptId =
-        offeredMapIndexToTaskAttemptIds.putIfAbsent(mapIndex, taskAttemptId);
-    return existingTaskAttemptId != null && existingTaskAttemptId == taskAttemptId;
+    return offeredMapIndexToTaskAttemptIds.putIfAbsent(mapIndex, taskAttemptId);
   }
 
   public void commitFinishedBlockIds(
@@ -842,6 +842,7 @@ public class ShuffleTaskManager {
           shuffleTaskInfo.getCachedBlockIds();
       partitionsToBlockIds.remove(appId);
       offeredMapIndexToTaskAttemptIds.remove(appId);
+      committedTaskAttemptIds.remove(appId);
       shuffleBufferManager.removeBuffer(appId);
       shuffleFlushManager.removeResources(appId);
       if (!shuffleToCachedBlockIds.isEmpty()) {
