@@ -85,10 +85,11 @@ public abstract class ShuffleReadWriteBase extends IntegrationTestBase {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
       long seqno = ATOMIC_LONG.getAndIncrement();
+      int mapIndex = 0;
 
       long blockId =
           (seqno << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH))
-              + taskAttemptId;
+              + mapIndex;
       blockIdBitmap.addLong(blockId);
       dataMap.put(blockId, buf);
       shuffleBlockInfoList.add(

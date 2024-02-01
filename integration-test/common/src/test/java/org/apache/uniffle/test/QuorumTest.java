@@ -451,7 +451,7 @@ public class QuorumTest extends ShuffleReadWriteBase {
           partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
-      assertTrue(e.getMessage().startsWith("Quorum check of report shuffle result is failed"));
+      assertTrue(e.getMessage().startsWith("Quorum check of offer shuffle result is failed"));
     }
     //  get result should also fail
     try {
@@ -464,6 +464,17 @@ public class QuorumTest extends ShuffleReadWriteBase {
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
       assertTrue(e.getMessage().startsWith("Get shuffle result is failed"));
+    }
+    //  get taskAttemptIds should also fail
+    try {
+      shuffleWriteClientImpl.getShuffleTaskAttemptIds(
+          "GRPC",
+          Sets.newHashSet(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2),
+          testAppId,
+          0);
+      fail(EXPECTED_EXCEPTION_MESSAGE);
+    } catch (Exception e) {
+      assertTrue(e.getMessage().startsWith("Get shuffle taskAttemptIds is failed"));
     }
   }
 
@@ -722,7 +733,7 @@ public class QuorumTest extends ShuffleReadWriteBase {
           partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
-      assertTrue(e.getMessage().startsWith("Quorum check of report shuffle result is failed"));
+      assertTrue(e.getMessage().startsWith("Quorum check of offer shuffle result is failed"), e.getMessage());
     }
   }
 

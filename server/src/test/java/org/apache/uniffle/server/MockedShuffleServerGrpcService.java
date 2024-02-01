@@ -103,6 +103,28 @@ public class MockedShuffleServerGrpcService extends ShuffleServerGrpcService {
   }
 
   @Override
+  public void offerShuffleResult(
+      RssProtos.OfferShuffleResultRequest request,
+      StreamObserver<RssProtos.OfferShuffleResultResponse> responseObserver) {
+    if (mockedTimeout > 0) {
+      LOG.info("Add a mocked timeout on offerShuffleResult");
+      Uninterruptibles.sleepUninterruptibly(mockedTimeout, TimeUnit.MILLISECONDS);
+    }
+    super.offerShuffleResult(request, responseObserver);
+  }
+
+  @Override
+  public void commitShuffleResult(
+          RssProtos.CommitShuffleResultRequest request,
+          StreamObserver<RssProtos.CommitShuffleResultResponse> responseObserver) {
+    if (mockedTimeout > 0) {
+      LOG.info("Add a mocked timeout on commitShuffleResult");
+      Uninterruptibles.sleepUninterruptibly(mockedTimeout, TimeUnit.MILLISECONDS);
+    }
+    super.commitShuffleResult(request, responseObserver);
+  }
+
+  @Override
   public void getShuffleResult(
       RssProtos.GetShuffleResultRequest request,
       StreamObserver<RssProtos.GetShuffleResultResponse> responseObserver) {
@@ -152,6 +174,27 @@ public class MockedShuffleServerGrpcService extends ShuffleServerGrpcService {
       partitionRequestNum.addAndGet(requestPartitions.size());
     }
     super.getShuffleResultForMultiPart(request, responseObserver);
+  }
+
+  @Override
+  public void getShuffleTaskAttemptIds(
+      RssProtos.GetShuffleTaskAttemptIdsRequest request,
+      StreamObserver<RssProtos.GetShuffleTaskAttemptIdsResponse> responseObserver) {
+    if (mockedTimeout > 0) {
+      LOG.info("Add a mocked timeout on getShuffleTaskAttemptIds");
+      Uninterruptibles.sleepUninterruptibly(mockedTimeout, TimeUnit.MILLISECONDS);
+    }
+    if (numOfFailedReadRequest > 0) {
+      int currentFailedReadRequest = failedReadRequest.getAndIncrement();
+      if (currentFailedReadRequest < numOfFailedReadRequest) {
+        LOG.info(
+                "This request is failed as mocked failure, current/firstN: {}/{}",
+                currentFailedReadRequest,
+                numOfFailedReadRequest);
+        throw new RuntimeException("This request is failed as mocked failure");
+      }
+    }
+    super.getShuffleTaskAttemptIds(request, responseObserver);
   }
 
   public Map<String, Map<Integer, AtomicInteger>> getShuffleIdToPartitionRequest() {
