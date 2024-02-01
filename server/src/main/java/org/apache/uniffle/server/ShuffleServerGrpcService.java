@@ -545,12 +545,14 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
 
     try {
       LOG.info("Offer blocks as shuffle result for the task of " + requestInfo);
-      boolean granted =
+      Long granted =
           shuffleServer
               .getShuffleTaskManager()
               .offerTaskAttemptIdForMapIndex(appId, shuffleId, mapIndex, taskAttemptId);
-      if (!granted) {
+      if (granted != null && !granted.equals(taskAttemptId)) {
         status = StatusCode.DOUBLE_REGISTER;
+        msg = "Offer " + requestInfo + "rejected, granted earlier to taskAttemptId " + granted;
+        LOG.info(msg);
       }
     } catch (Exception e) {
       status = StatusCode.INTERNAL_ERROR;
