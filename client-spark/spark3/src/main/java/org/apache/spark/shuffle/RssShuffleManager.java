@@ -18,7 +18,6 @@
 package org.apache.spark.shuffle;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -539,39 +538,8 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       int endPartition,
       TaskContext context,
       ShuffleReadMetricsReporter metrics) {
-    RssShuffleHandle<K, ?, C> rssShuffleHandle = (RssShuffleHandle<K, ?, C>) handle;
-    long start = System.currentTimeMillis();
-    Roaring64NavigableMap taskIdBitmap =
-        getExpectedTasksByRange(
-            rssShuffleHandle.getAppId(),
-            handle.shuffleId(),
-            rssShuffleHandle.getPartitionToServers(),
-            startPartition,
-            endPartition,
-            startMapIndex,
-            endMapIndex,
-            context.stageId());
-    LOG.info(
-        "Get taskId cost "
-            + (System.currentTimeMillis() - start)
-            + " ms, and request expected blockIds from "
-            + taskIdBitmap.getLongCardinality()
-            + " tasks for shuffleId["
-            + handle.shuffleId()
-            + "], partitionId["
-            + startPartition
-            + ", "
-            + endPartition
-            + "]");
     return getReaderImpl(
-        handle,
-        startMapIndex,
-        endMapIndex,
-        startPartition,
-        endPartition,
-        context,
-        metrics,
-        taskIdBitmap);
+        handle, startMapIndex, endMapIndex, startPartition, endPartition, context, metrics);
   }
 
   // The interface is used for compatibility with spark 3.0.1
@@ -583,39 +551,8 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       int endPartition,
       TaskContext context,
       ShuffleReadMetricsReporter metrics) {
-    RssShuffleHandle<K, ?, C> rssShuffleHandle = (RssShuffleHandle<K, ?, C>) handle;
-    long start = System.currentTimeMillis();
-    Roaring64NavigableMap taskIdBitmap =
-        getExpectedTasksByRange(
-            rssShuffleHandle.getAppId(),
-            handle.shuffleId(),
-            rssShuffleHandle.getPartitionToServers(),
-            startPartition,
-            endPartition,
-            startMapIndex,
-            endMapIndex,
-            context.stageId());
-    LOG.info(
-        "Get taskId cost "
-            + (System.currentTimeMillis() - start)
-            + " ms, and request expected blockIds from "
-            + taskIdBitmap.getLongCardinality()
-            + " tasks for shuffleId["
-            + handle.shuffleId()
-            + "], partitionId["
-            + startPartition
-            + ", "
-            + endPartition
-            + "]");
     return getReaderImpl(
-        handle,
-        startMapIndex,
-        endMapIndex,
-        startPartition,
-        endPartition,
-        context,
-        metrics,
-        taskIdBitmap);
+        handle, startMapIndex, endMapIndex, startPartition, endPartition, context, metrics);
   }
 
   public <K, C> ShuffleReader<K, C> getReaderImpl(
@@ -625,8 +562,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       int startPartition,
       int endPartition,
       TaskContext context,
-      ShuffleReadMetricsReporter metrics,
-      Roaring64NavigableMap taskIdBitmap) {
+      ShuffleReadMetricsReporter metrics) {
     if (!(handle instanceof RssShuffleHandle)) {
       throw new RssException("Unexpected ShuffleHandle:" + handle.getClass().getName());
     }
@@ -702,6 +638,26 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       }
     }
 
+    start = System.currentTimeMillis();
+    Roaring64NavigableMap taskIdBitmap =
+        getExpectedTasksByRange(
+            rssShuffleHandle.getAppId(),
+            handle.shuffleId(),
+            serverToPartitions.keySet(),
+            context.stageId());
+    LOG.info(
+        "Get taskId cost "
+            + (System.currentTimeMillis() - start)
+            + " ms, and get "
+            + taskIdBitmap.getLongCardinality()
+            + " taskAttemptIds for shuffleId["
+            + handle.shuffleId()
+            + "], partitionId["
+            + startPartition
+            + ", "
+            + endPartition
+            + "]");
+
     ShuffleReadMetrics readMetrics;
     if (metrics != null) {
       readMetrics = new ReadMetrics(metrics);
@@ -734,31 +690,12 @@ public class RssShuffleManager extends RssShuffleManagerBase {
   }
 
   private Roaring64NavigableMap getExpectedTasksByRange(
-      String appId,
-      int shuffleId,
-      Map<Integer, List<ShuffleServerInfo>> partitionToServers,
-      int startPartition,
-      int endPartition,
-      int startMapIndex,
-      int endMapIndex,
-      int stageAttemptId) {
-    if (startPartition == endPartition) {
-      Set<ShuffleServerInfo> servers = Sets.newHashSet(partitionToServers.get(startPartition));
+      String appId, int shuffleId, Set<ShuffleServerInfo> servers, int stageAttemptId) {
+    try {
       return shuffleWriteClient.getShuffleTaskAttemptIds(clientType, servers, appId, shuffleId);
-    } else {
-      Set<Integer> failedPartitions = Sets.newHashSet();
-      Set<ShuffleServerInfo> servers =
-          partitionToServers.entrySet().stream()
-              .filter(x -> x.getKey() >= startPartition && x.getKey() < endPartition)
-              .map(Map.Entry::getValue)
-              .flatMap(Collection::stream)
-              .collect(Collectors.toSet());
-      try {
-        return shuffleWriteClient.getShuffleTaskAttemptIds(clientType, servers, appId, shuffleId);
-      } catch (RssFetchFailedException e) {
-        throw RssSparkShuffleUtils.reportRssFetchFailedException(
-            e, sparkConf, appId, shuffleId, stageAttemptId, failedPartitions);
-      }
+    } catch (RssFetchFailedException e) {
+      throw RssSparkShuffleUtils.reportRssFetchFailedException(
+          e, sparkConf, appId, shuffleId, stageAttemptId, Sets.newHashSet());
     }
   }
 

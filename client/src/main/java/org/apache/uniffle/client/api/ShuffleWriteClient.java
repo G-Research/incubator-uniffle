@@ -71,7 +71,7 @@ public interface ShuffleWriteClient {
       int bitmapNum);
 
   Roaring64NavigableMap getShuffleTaskAttemptIds(
-      String clientType, Set<ShuffleServerInfo> shuffleServerInfoSet, String appId, int shuffleId);
+      String clientType, Set<ShuffleServerInfo> servers, String appId, int shuffleId);
 
   default ShuffleAssignmentsInfo getShuffleAssignments(
       String appId,
