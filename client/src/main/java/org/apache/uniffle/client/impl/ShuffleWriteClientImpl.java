@@ -717,6 +717,10 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
             + appId
             + "], shuffleId["
             + shuffleId
+            + "], mapIndex["
+            + mapIndex
+            + "], taskAttemptId["
+            + taskAttemptId
             + "]");
 
     commitShuffleResult(
@@ -734,6 +738,10 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
             + appId
             + "], shuffleId["
             + shuffleId
+            + "], mapIndex["
+            + mapIndex
+            + "], taskAttemptId["
+            + taskAttemptId
             + "]");
   }
 
