@@ -802,6 +802,7 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
         CommitShuffleResultRequest.newBuilder()
             .setAppId(request.getAppId())
             .setShuffleId(request.getShuffleId())
+            .setMapIndex(request.getMapIndex())
             .setTaskAttemptId(request.getTaskAttemptId())
             .setBitmapNum(request.getBitmapNum())
             .addAllPartitionToBlockIds(partitionToBlockIds)
