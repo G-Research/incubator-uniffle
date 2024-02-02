@@ -115,8 +115,8 @@ public class MockedShuffleServerGrpcService extends ShuffleServerGrpcService {
 
   @Override
   public void commitShuffleResult(
-          RssProtos.CommitShuffleResultRequest request,
-          StreamObserver<RssProtos.CommitShuffleResultResponse> responseObserver) {
+      RssProtos.CommitShuffleResultRequest request,
+      StreamObserver<RssProtos.CommitShuffleResultResponse> responseObserver) {
     if (mockedTimeout > 0) {
       LOG.info("Add a mocked timeout on commitShuffleResult");
       Uninterruptibles.sleepUninterruptibly(mockedTimeout, TimeUnit.MILLISECONDS);

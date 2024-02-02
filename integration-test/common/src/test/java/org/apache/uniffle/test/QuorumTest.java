@@ -733,7 +733,9 @@ public class QuorumTest extends ShuffleReadWriteBase {
           partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
-      assertTrue(e.getMessage().startsWith("Quorum check of offer shuffle result is failed"), e.getMessage());
+      assertTrue(
+          e.getMessage().startsWith("Quorum check of offer shuffle result is failed"),
+          e.getMessage());
     }
   }
 
