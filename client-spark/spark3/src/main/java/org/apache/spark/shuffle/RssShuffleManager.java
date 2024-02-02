@@ -748,7 +748,9 @@ public class RssShuffleManager extends RssShuffleManagerBase {
     } else {
       Set<Integer> failedPartitions = Sets.newHashSet();
       Set<ShuffleServerInfo> servers =
-          partitionToServers.values().stream()
+          partitionToServers.entrySet().stream()
+              .filter(x -> x.getKey() >= startPartition && x.getKey() < endPartition)
+              .map(Map.Entry::getValue)
               .flatMap(Collection::stream)
               .collect(Collectors.toSet());
       try {
