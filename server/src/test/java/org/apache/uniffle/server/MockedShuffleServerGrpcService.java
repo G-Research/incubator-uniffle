@@ -184,16 +184,6 @@ public class MockedShuffleServerGrpcService extends ShuffleServerGrpcService {
       LOG.info("Add a mocked timeout on getShuffleTaskAttemptIds");
       Uninterruptibles.sleepUninterruptibly(mockedTimeout, TimeUnit.MILLISECONDS);
     }
-    if (numOfFailedReadRequest > 0) {
-      int currentFailedReadRequest = failedReadRequest.getAndIncrement();
-      if (currentFailedReadRequest < numOfFailedReadRequest) {
-        LOG.info(
-                "This request is failed as mocked failure, current/firstN: {}/{}",
-                currentFailedReadRequest,
-                numOfFailedReadRequest);
-        throw new RuntimeException("This request is failed as mocked failure");
-      }
-    }
     super.getShuffleTaskAttemptIds(request, responseObserver);
   }
 
