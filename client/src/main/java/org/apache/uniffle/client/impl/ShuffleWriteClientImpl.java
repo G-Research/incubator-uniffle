@@ -982,6 +982,10 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
   @Override
   public Roaring64NavigableMap getShuffleTaskAttemptIds(
       String clientType, Set<ShuffleServerInfo> shuffleServerInfoSet, String appId, int shuffleId) {
+    if (shuffleServerInfoSet.size() < replicaRead) {
+      throw new RssFetchFailedException("Get shuffle taskAttemptIds called with too few servers to reach read quorum of 3: " + shuffleServerInfoSet);
+    }
+
     RssGetShuffleTaskAttemptIdsRequest request =
         new RssGetShuffleTaskAttemptIdsRequest(appId, shuffleId);
     boolean isSuccessful = false;
