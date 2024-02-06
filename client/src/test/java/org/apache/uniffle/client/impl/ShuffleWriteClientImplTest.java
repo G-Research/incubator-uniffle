@@ -25,10 +25,8 @@ import java.util.concurrent.TimeUnit;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.apache.uniffle.common.exception.RssFetchFailedException;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.function.Executable;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
 
@@ -41,10 +39,13 @@ import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
+import org.apache.uniffle.common.exception.RssFetchFailedException;
 import org.apache.uniffle.common.netty.IOMode;
 import org.apache.uniffle.common.rpc.StatusCode;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -324,19 +325,19 @@ public class ShuffleWriteClientImplTest {
   @Test
   public void testGetShuffleTaskAttemptIds() {
     ShuffleClientFactory.WriteClientBuilder writeClientBuilder =
-            ShuffleClientFactory.newWriteBuilder()
-                    .clientType(ClientType.GRPC_NETTY.name())
-                    .retryMax(3)
-                    .retryIntervalMax(2000)
-                    .heartBeatThreadNum(4)
-                    .replica(1)
-                    .replicaWrite(1)
-                    .replicaRead(3)
-                    .replicaSkipEnabled(true)
-                    .dataTransferPoolSize(1)
-                    .dataCommitPoolSize(1)
-                    .unregisterThreadPoolSize(10)
-                    .unregisterRequestTimeSec(10);
+        ShuffleClientFactory.newWriteBuilder()
+            .clientType(ClientType.GRPC_NETTY.name())
+            .retryMax(3)
+            .retryIntervalMax(2000)
+            .heartBeatThreadNum(4)
+            .replica(1)
+            .replicaWrite(1)
+            .replicaRead(3)
+            .replicaSkipEnabled(true)
+            .dataTransferPoolSize(1)
+            .dataCommitPoolSize(1)
+            .unregisterThreadPoolSize(10)
+            .unregisterRequestTimeSec(10);
     ShuffleWriteClientImpl client = writeClientBuilder.build();
 
     ShuffleServerInfo ssi1 = new ShuffleServerInfo("127.0.0.1", 0);
@@ -348,15 +349,15 @@ public class ShuffleWriteClientImplTest {
     // expect error message about too few servers to reach quorum
     for (ShuffleServerInfo server : allShuffleServerInfos) {
       // test with 0, 1 and 2 servers
-      Exception e = assertThrows(
-            RssFetchFailedException.class,
-            () -> client.getShuffleTaskAttemptIds("test", shuffleServerInfos, "app", 0),
-            shuffleServerInfos.toString()
-      );
+      Exception e =
+          assertThrows(
+              RssFetchFailedException.class,
+              () -> client.getShuffleTaskAttemptIds("test", shuffleServerInfos, "app", 0),
+              shuffleServerInfos.toString());
       assertEquals(
-            "Get shuffle taskAttemptIds called with too few servers to reach read quorum of 3: " + shuffleServerInfos,
-            e.getMessage()
-      );
+          "Get shuffle taskAttemptIds called with too few servers to reach read quorum of 3: "
+              + shuffleServerInfos,
+          e.getMessage());
 
       // add server for next test
       shuffleServerInfos.add(server);
@@ -364,9 +365,8 @@ public class ShuffleWriteClientImplTest {
 
     // with three servers we expect the usual error because the servers are not reachable
     assertThrows(
-            RssFetchFailedException.class,
-            () -> client.getShuffleTaskAttemptIds("test", shuffleServerInfos, "app", 0),
-            "Get shuffle taskAttemptIds is failed for appId[app], shuffleId[0]"
-    );
+        RssFetchFailedException.class,
+        () -> client.getShuffleTaskAttemptIds("test", shuffleServerInfos, "app", 0),
+        "Get shuffle taskAttemptIds is failed for appId[app], shuffleId[0]");
   }
 }

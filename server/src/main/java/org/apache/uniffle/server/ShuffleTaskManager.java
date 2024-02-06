@@ -464,7 +464,8 @@ public class ShuffleTaskManager {
     Long offered = offeredMapIndexToTaskAttemptIds.get(mapIndex);
     // if there is no offer, it might have been committed already,
     // or another taskAttemptId offer has been accepted
-    if (offered == null && !taskAttemptIds.contains(taskAttemptId) || offered != null && offered != taskAttemptId) {
+    if (offered == null && !taskAttemptIds.contains(taskAttemptId)
+        || offered != null && offered != taskAttemptId) {
       throw new RssException(
           "committing taskAttempId["
               + taskAttemptId
