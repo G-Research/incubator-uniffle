@@ -231,11 +231,9 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   }
 
   /** Create dummy BlockManagerId and embed partition->blockIds */
-  private BlockManagerId createDummyBlockManagerId(String executorId, long taskAttemptId) {
+  private BlockManagerId createDummyBlockManagerId(String executorId) {
     // dummy values are used there for host and port check in BlockManagerId
-    // hack: use topologyInfo field in BlockManagerId to store [partition, blockIds]
-    return BlockManagerId.apply(
-        executorId, DUMMY_HOST, DUMMY_PORT, Option.apply(Long.toString(taskAttemptId)));
+    return BlockManagerId.apply(executorId, DUMMY_HOST, DUMMY_PORT, Option.empty());
   }
 
   @Override
@@ -423,8 +421,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
         // correctly
         long[] partitionLengths = new long[partitioner.numPartitions()];
         Arrays.fill(partitionLengths, 1);
-        final BlockManagerId blockManagerId =
-            createDummyBlockManagerId(appId + "_" + taskId, taskAttemptId);
+        final BlockManagerId blockManagerId = createDummyBlockManagerId(appId + "_" + taskId);
 
         Map<Integer, List<Long>> ptb = Maps.newHashMap();
         for (Map.Entry<Integer, Set<Long>> entry : partitionToBlockIds.entrySet()) {
