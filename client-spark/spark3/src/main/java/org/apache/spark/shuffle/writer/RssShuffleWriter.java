@@ -481,7 +481,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
                 appId + "_" + taskId,
                 DUMMY_HOST,
                 DUMMY_PORT,
-                Option.apply(Long.toString(taskAttemptId)));
+                Option.empty());
         MapStatus mapStatus = MapStatus.apply(blockManagerId, partitionLengths, taskAttemptId);
         return Option.apply(mapStatus);
       } else {
