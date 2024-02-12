@@ -19,10 +19,12 @@ package org.apache.uniffle.client.impl;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -37,10 +39,12 @@ import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
+import org.apache.uniffle.common.exception.RssFetchFailedException;
 import org.apache.uniffle.common.netty.IOMode;
 import org.apache.uniffle.common.rpc.StatusCode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
@@ -316,5 +320,53 @@ public class ShuffleWriteClientImplTest {
     IOMode ioMode = writeClientBuilder.getRssConf().get(RssClientConf.NETTY_IO_MODE);
     client.close();
     assertEquals(IOMode.EPOLL, ioMode);
+  }
+
+  @Test
+  public void testGetShuffleTaskAttemptIds() {
+    ShuffleClientFactory.WriteClientBuilder writeClientBuilder =
+        ShuffleClientFactory.newWriteBuilder()
+            .clientType(ClientType.GRPC_NETTY.name())
+            .retryMax(3)
+            .retryIntervalMax(2000)
+            .heartBeatThreadNum(4)
+            .replica(1)
+            .replicaWrite(1)
+            .replicaRead(3)
+            .replicaSkipEnabled(true)
+            .dataTransferPoolSize(1)
+            .dataCommitPoolSize(1)
+            .unregisterThreadPoolSize(10)
+            .unregisterRequestTimeSec(10);
+    ShuffleWriteClientImpl client = writeClientBuilder.build();
+
+    ShuffleServerInfo ssi1 = new ShuffleServerInfo("127.0.0.1", 0);
+    ShuffleServerInfo ssi2 = new ShuffleServerInfo("127.0.0.1", 1);
+    ShuffleServerInfo ssi3 = new ShuffleServerInfo("127.0.0.1", 2);
+    Set<ShuffleServerInfo> shuffleServerInfos = Sets.newHashSet();
+    Set<ShuffleServerInfo> allShuffleServerInfos = Sets.newHashSet(ssi1, ssi2, ssi3);
+
+    // expect error message about too few servers to reach quorum
+    for (ShuffleServerInfo server : allShuffleServerInfos) {
+      // test with 0, 1 and 2 servers
+      Exception e =
+          assertThrows(
+              RssFetchFailedException.class,
+              () -> client.getShuffleTaskAttemptIds("test", shuffleServerInfos, "app", 0),
+              shuffleServerInfos.toString());
+      assertEquals(
+          "Get shuffle taskAttemptIds called with too few servers to reach read quorum of 3: "
+              + shuffleServerInfos,
+          e.getMessage());
+
+      // add server for next test
+      shuffleServerInfos.add(server);
+    }
+
+    // with three servers we expect the usual error because the servers are not reachable
+    assertThrows(
+        RssFetchFailedException.class,
+        () -> client.getShuffleTaskAttemptIds("test", shuffleServerInfos, "app", 0),
+        "Get shuffle taskAttemptIds is failed for appId[app], shuffleId[0]");
   }
 }

@@ -167,7 +167,7 @@ public class ShuffleWithRssClientTest extends ShuffleReadWriteBase {
     ptb.put(0, Lists.newArrayList(blockIdBitmap.stream().iterator()));
     Map<Integer, List<ShuffleServerInfo>> partitionToServers = Maps.newHashMap();
     partitionToServers.put(0, Lists.newArrayList(shuffleServerInfo1, fakeShuffleServerInfo));
-    shuffleWriteClientImpl.reportShuffleResult(partitionToServers, testAppId, 0, 0, ptb, 2);
+    shuffleWriteClientImpl.reportShuffleResult(partitionToServers, testAppId, 0, 0, 0, ptb, 2);
     Roaring64NavigableMap report =
         shuffleWriteClientImpl.getShuffleResult(
             "GRPC", Sets.newHashSet(shuffleServerInfo1, fakeShuffleServerInfo), testAppId, 0, 0);
@@ -210,7 +210,7 @@ public class ShuffleWithRssClientTest extends ShuffleReadWriteBase {
 
     // case1
     shuffleWriteClientImpl.reportShuffleResult(
-        partitionToServers, testAppId, 1, 0, partitionToBlocks, 1);
+        partitionToServers, testAppId, 1, 0, 0, partitionToBlocks, 1);
     Roaring64NavigableMap bitmap =
         shuffleWriteClientImpl.getShuffleResult(
             "GRPC", Sets.newHashSet(shuffleServerInfo1), testAppId, 1, 0);
@@ -262,7 +262,7 @@ public class ShuffleWithRssClientTest extends ShuffleReadWriteBase {
     }
     partitionToBlocks.put(2, blockIds);
     shuffleWriteClientImpl.reportShuffleResult(
-        partitionToServers, testAppId, 1, 0, partitionToBlocks, 1);
+        partitionToServers, testAppId, 1, 0, 0, partitionToBlocks, 1);
 
     Roaring64NavigableMap bitmap =
         shuffleWriteClientImpl.getShuffleResult(

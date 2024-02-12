@@ -50,14 +50,16 @@ import org.apache.uniffle.client.factory.ShuffleClientFactory;
 import org.apache.uniffle.client.factory.ShuffleServerClientFactory;
 import org.apache.uniffle.client.request.RssAppHeartBeatRequest;
 import org.apache.uniffle.client.request.RssApplicationInfoRequest;
+import org.apache.uniffle.client.request.RssCommitShuffleResultRequest;
 import org.apache.uniffle.client.request.RssFetchClientConfRequest;
 import org.apache.uniffle.client.request.RssFetchRemoteStorageRequest;
 import org.apache.uniffle.client.request.RssFinishShuffleRequest;
 import org.apache.uniffle.client.request.RssGetShuffleAssignmentsRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.client.request.RssGetShuffleResultRequest;
+import org.apache.uniffle.client.request.RssGetShuffleTaskAttemptIdsRequest;
+import org.apache.uniffle.client.request.RssOfferShuffleResultRequest;
 import org.apache.uniffle.client.request.RssRegisterShuffleRequest;
-import org.apache.uniffle.client.request.RssReportShuffleResultRequest;
 import org.apache.uniffle.client.request.RssSendCommitRequest;
 import org.apache.uniffle.client.request.RssSendShuffleDataRequest;
 import org.apache.uniffle.client.request.RssUnregisterShuffleByAppIdRequest;
@@ -65,13 +67,15 @@ import org.apache.uniffle.client.request.RssUnregisterShuffleRequest;
 import org.apache.uniffle.client.response.ClientResponse;
 import org.apache.uniffle.client.response.RssAppHeartBeatResponse;
 import org.apache.uniffle.client.response.RssApplicationInfoResponse;
+import org.apache.uniffle.client.response.RssCommitShuffleResultResponse;
 import org.apache.uniffle.client.response.RssFetchClientConfResponse;
 import org.apache.uniffle.client.response.RssFetchRemoteStorageResponse;
 import org.apache.uniffle.client.response.RssFinishShuffleResponse;
 import org.apache.uniffle.client.response.RssGetShuffleAssignmentsResponse;
 import org.apache.uniffle.client.response.RssGetShuffleResultResponse;
+import org.apache.uniffle.client.response.RssGetShuffleTaskAttemptIdsResponse;
+import org.apache.uniffle.client.response.RssOfferShuffleResultResponse;
 import org.apache.uniffle.client.response.RssRegisterShuffleResponse;
-import org.apache.uniffle.client.response.RssReportShuffleResultResponse;
 import org.apache.uniffle.client.response.RssSendCommitResponse;
 import org.apache.uniffle.client.response.RssSendShuffleDataResponse;
 import org.apache.uniffle.client.response.RssUnregisterShuffleByAppIdResponse;
@@ -678,10 +682,12 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       Map<Integer, List<ShuffleServerInfo>> partitionToServers,
       String appId,
       int shuffleId,
+      int mapIndex,
       long taskAttemptId,
       Map<Integer, List<Long>> partitionToBlockIds,
       int bitmapNum) {
     Map<ShuffleServerInfo, List<Integer>> groupedPartitions = Maps.newHashMap();
+    Map<Integer, Integer> commitQuorumTracker = Maps.newHashMap();
     Map<Integer, Integer> partitionReportTracker = Maps.newHashMap();
     for (Map.Entry<Integer, List<ShuffleServerInfo>> entry : partitionToServers.entrySet()) {
       int partitionIdx = entry.getKey();
@@ -692,10 +698,61 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
         groupedPartitions.get(ssi).add(partitionIdx);
       }
       if (CollectionUtils.isNotEmpty(partitionToBlockIds.get(partitionIdx))) {
+        commitQuorumTracker.putIfAbsent(partitionIdx, 0);
         partitionReportTracker.putIfAbsent(partitionIdx, 0);
       }
     }
 
+    offerShuffleResult(
+        appId,
+        shuffleId,
+        mapIndex,
+        taskAttemptId,
+        groupedPartitions,
+        partitionToBlockIds,
+        commitQuorumTracker);
+    checkQuorum(
+        commitQuorumTracker,
+        "Quorum check of offer shuffle result is failed for appId["
+            + appId
+            + "], shuffleId["
+            + shuffleId
+            + "], mapIndex["
+            + mapIndex
+            + "], taskAttemptId["
+            + taskAttemptId
+            + "]");
+
+    commitShuffleResult(
+        appId,
+        shuffleId,
+        mapIndex,
+        taskAttemptId,
+        groupedPartitions,
+        partitionToBlockIds,
+        bitmapNum,
+        partitionReportTracker);
+    checkQuorum(
+        partitionReportTracker,
+        "Quorum check of commit shuffle result is failed for appId["
+            + appId
+            + "], shuffleId["
+            + shuffleId
+            + "], mapIndex["
+            + mapIndex
+            + "], taskAttemptId["
+            + taskAttemptId
+            + "]");
+  }
+
+  private void offerShuffleResult(
+      String appId,
+      int shuffleId,
+      int mapIndex,
+      long taskAttemptId,
+      Map<ShuffleServerInfo, List<Integer>> groupedPartitions,
+      Map<Integer, List<Long>> partitionToBlockIds,
+      Map<Integer, Integer> tracker) {
     for (Map.Entry<ShuffleServerInfo, List<Integer>> entry : groupedPartitions.entrySet()) {
       Map<Integer, List<Long>> requestBlockIds = Maps.newHashMap();
       for (Integer partitionId : entry.getValue()) {
@@ -707,16 +764,15 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       if (requestBlockIds.isEmpty()) {
         continue;
       }
-      RssReportShuffleResultRequest request =
-          new RssReportShuffleResultRequest(
-              appId, shuffleId, taskAttemptId, requestBlockIds, bitmapNum);
+      RssOfferShuffleResultRequest request =
+          new RssOfferShuffleResultRequest(appId, shuffleId, mapIndex, taskAttemptId);
       ShuffleServerInfo ssi = entry.getKey();
       try {
-        RssReportShuffleResultResponse response =
-            getShuffleServerClient(ssi).reportShuffleResult(request);
+        RssOfferShuffleResultResponse response =
+            getShuffleServerClient(ssi).offerShuffleResult(request);
         if (response.getStatusCode() == StatusCode.SUCCESS) {
           LOG.info(
-              "Report shuffle result to "
+              "Offer of shuffle result to "
                   + ssi
                   + " for appId["
                   + appId
@@ -724,11 +780,15 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                   + shuffleId
                   + "] successfully");
           for (Integer partitionId : requestBlockIds.keySet()) {
-            partitionReportTracker.put(partitionId, partitionReportTracker.get(partitionId) + 1);
+            tracker.put(partitionId, tracker.get(partitionId) + 1);
           }
         } else {
+          // TODO: if response is DOUBLE_REGISTER defer next call by a random number of ms like
+          // [100ms, 200ms]
+          // this is only needed when there are more than two concurrent map tasks or network
+          // failures occur
           LOG.warn(
-              "Report shuffle result to "
+              "Offer of shuffle result to "
                   + ssi
                   + " for appId["
                   + appId
@@ -739,7 +799,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
         }
       } catch (Exception e) {
         LOG.warn(
-            "Report shuffle result is failed to "
+            "Offer of shuffle result is failed to "
                 + ssi
                 + " for appId["
                 + appId
@@ -748,15 +808,75 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                 + "]");
       }
     }
-    // quorum check
-    for (Map.Entry<Integer, Integer> entry : partitionReportTracker.entrySet()) {
-      if (entry.getValue() < replicaWrite) {
-        throw new RssException(
-            "Quorum check of report shuffle result is failed for appId["
+  }
+
+  private void commitShuffleResult(
+      String appId,
+      int shuffleId,
+      int mapIndex,
+      long taskAttemptId,
+      Map<ShuffleServerInfo, List<Integer>> groupedPartitions,
+      Map<Integer, List<Long>> partitionToBlockIds,
+      int bitmapNum,
+      Map<Integer, Integer> tracker) {
+    for (Map.Entry<ShuffleServerInfo, List<Integer>> entry : groupedPartitions.entrySet()) {
+      Map<Integer, List<Long>> requestBlockIds = Maps.newHashMap();
+      for (Integer partitionId : entry.getValue()) {
+        List<Long> blockIds = partitionToBlockIds.get(partitionId);
+        if (CollectionUtils.isNotEmpty(blockIds)) {
+          requestBlockIds.put(partitionId, blockIds);
+        }
+      }
+      if (requestBlockIds.isEmpty()) {
+        continue;
+      }
+      RssCommitShuffleResultRequest request =
+          new RssCommitShuffleResultRequest(
+              appId, shuffleId, mapIndex, taskAttemptId, requestBlockIds, bitmapNum);
+      ShuffleServerInfo ssi = entry.getKey();
+      try {
+        RssCommitShuffleResultResponse response =
+            getShuffleServerClient(ssi).commitShuffleResult(request);
+        if (response.getStatusCode() == StatusCode.SUCCESS) {
+          LOG.info(
+              "Committing shuffle result to "
+                  + ssi
+                  + " for appId["
+                  + appId
+                  + "], shuffleId["
+                  + shuffleId
+                  + "] successfully");
+          for (Integer partitionId : requestBlockIds.keySet()) {
+            tracker.put(partitionId, tracker.get(partitionId) + 1);
+          }
+        } else {
+          LOG.warn(
+              "Committing shuffle result to "
+                  + ssi
+                  + " for appId["
+                  + appId
+                  + "], shuffleId["
+                  + shuffleId
+                  + "] failed with "
+                  + response.getStatusCode());
+        }
+      } catch (Exception e) {
+        LOG.warn(
+            "Committing shuffle result is failed to "
+                + ssi
+                + " for appId["
                 + appId
                 + "], shuffleId["
                 + shuffleId
                 + "]");
+      }
+    }
+  }
+
+  private void checkQuorum(Map<Integer, Integer> tracker, String message) {
+    for (Map.Entry<Integer, Integer> entry : tracker.entrySet()) {
+      if (entry.getValue() < replicaWrite) {
+        throw new RssException(message);
       }
     }
   }
@@ -857,6 +977,56 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
           "Get shuffle result is failed for appId[" + appId + "], shuffleId[" + shuffleId + "]");
     }
     return blockIdBitmap;
+  }
+
+  @Override
+  public Roaring64NavigableMap getShuffleTaskAttemptIds(
+      String clientType, Set<ShuffleServerInfo> shuffleServerInfoSet, String appId, int shuffleId) {
+    if (shuffleServerInfoSet.size() < replicaRead) {
+      throw new RssFetchFailedException(
+          "Get shuffle taskAttemptIds called with too few servers to reach read quorum of 3: "
+              + shuffleServerInfoSet);
+    }
+
+    RssGetShuffleTaskAttemptIdsRequest request =
+        new RssGetShuffleTaskAttemptIdsRequest(appId, shuffleId);
+    boolean isSuccessful = false;
+    Roaring64NavigableMap taskAttemptIdBitmap = Roaring64NavigableMap.bitmapOf();
+    int successCnt = 0;
+    for (ShuffleServerInfo ssi : shuffleServerInfoSet) {
+      try {
+        RssGetShuffleTaskAttemptIdsResponse response =
+            getShuffleServerClient(ssi).getShuffleTaskAttemptIds(request);
+        if (response.getStatusCode() == StatusCode.SUCCESS) {
+          // merge into taskAttemptIds from multiple servers.
+          Roaring64NavigableMap taskAttemptIdBitmapOfServer = response.getTaskAttemptIdBitmap();
+          taskAttemptIdBitmap.or(taskAttemptIdBitmapOfServer);
+          successCnt++;
+          if (successCnt >= replicaRead) {
+            isSuccessful = true;
+            break;
+          }
+        }
+      } catch (Exception e) {
+        LOG.warn(
+            "Get shuffle taskAttemptIds is failed from "
+                + ssi
+                + " for appId["
+                + appId
+                + "], shuffleId["
+                + shuffleId
+                + "]");
+      }
+    }
+    if (!isSuccessful) {
+      throw new RssFetchFailedException(
+          "Get shuffle taskAttemptIds is failed for appId["
+              + appId
+              + "], shuffleId["
+              + shuffleId
+              + "]");
+    }
+    return taskAttemptIdBitmap;
   }
 
   @Override

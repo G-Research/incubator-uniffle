@@ -106,6 +106,10 @@ public class ShuffleTaskManager {
   // but when get blockId, performance will degrade a little which can be optimized by client
   // configuration
   private Map<String, Map<Integer, Roaring64NavigableMap[]>> partitionsToBlockIds;
+  // appId -> shuffleId -> mapIndex -> taskAttemptId offers
+  private Map<String, Map<Integer, Map<Integer, Long>>> offeredMapIndexToTaskAttemptIds;
+  // appId -> shuffleId -> taskAttemptIds commits
+  private Map<String, Map<Integer, Roaring64NavigableMap>> committedTaskAttemptIds;
   private final ShuffleBufferManager shuffleBufferManager;
   private Map<String, ShuffleTaskInfo> shuffleTaskInfos = JavaUtils.newConcurrentMap();
   private Map<Long, PreAllocatedBufferInfo> requireBufferIds = JavaUtils.newConcurrentMap();
@@ -121,6 +125,8 @@ public class ShuffleTaskManager {
     this.conf = conf;
     this.shuffleFlushManager = shuffleFlushManager;
     this.partitionsToBlockIds = JavaUtils.newConcurrentMap();
+    this.offeredMapIndexToTaskAttemptIds = JavaUtils.newConcurrentMap();
+    this.committedTaskAttemptIds = JavaUtils.newConcurrentMap();
     this.shuffleBufferManager = shuffleBufferManager;
     this.storageManager = storageManager;
     this.appExpiredWithoutHB = conf.getLong(ShuffleServerConf.SERVER_APP_EXPIRED_WITHOUT_HEARTBEAT);
@@ -271,6 +277,8 @@ public class ShuffleTaskManager {
               .build());
 
       partitionsToBlockIds.computeIfAbsent(appId, key -> JavaUtils.newConcurrentMap());
+      offeredMapIndexToTaskAttemptIds.computeIfAbsent(appId, key -> JavaUtils.newConcurrentMap());
+      committedTaskAttemptIds.computeIfAbsent(appId, key -> JavaUtils.newConcurrentMap());
       for (PartitionRange partitionRange : partitionRanges) {
         shuffleBufferManager.registerBuffer(
             appId, shuffleId, partitionRange.getStart(), partitionRange.getEnd());
@@ -412,6 +420,85 @@ public class ShuffleTaskManager {
         }
       }
     }
+  }
+
+  public Long offerTaskAttemptIdForMapIndex(
+      String appId, Integer shuffleId, int mapIndex, long taskAttemptId) {
+    refreshAppId(appId);
+    Map<Integer, Map<Integer, Long>> shuffleIdToOffers = offeredMapIndexToTaskAttemptIds.get(appId);
+    if (shuffleIdToOffers == null) {
+      throw new RssException("appId[" + appId + "] is expired!");
+    }
+    shuffleIdToOffers.computeIfAbsent(shuffleId, key -> JavaUtils.newConcurrentMap());
+    Map<Integer, Long> offeredMapIndexToTaskAttemptIds = shuffleIdToOffers.get(shuffleId);
+    return offeredMapIndexToTaskAttemptIds.putIfAbsent(mapIndex, taskAttemptId);
+  }
+
+  public void commitFinishedBlockIds(
+      String appId,
+      Integer shuffleId,
+      int mapIndex,
+      long taskAttemptId,
+      Map<Integer, long[]> partitionToBlockIds,
+      int bitmapNum) {
+    refreshAppId(appId);
+
+    // get taskAttemptIds of this shuffle
+    Map<Integer, Roaring64NavigableMap> shuffleIdToPartitions = committedTaskAttemptIds.get(appId);
+    if (shuffleIdToPartitions == null) {
+      throw new RssException("appId[" + appId + "] is expired!");
+    }
+    shuffleIdToPartitions.computeIfAbsent(shuffleId, key -> new Roaring64NavigableMap());
+    Roaring64NavigableMap taskAttemptIds = shuffleIdToPartitions.get(shuffleId);
+
+    // TODO: remove this barrier to allow committing to all servers
+    // we should trust the client to not commit without quorum
+    // which would allow the map task that has quorum to commit on all servers
+    // not just the ones that accepted the offer
+    Map<Integer, Map<Integer, Long>> shuffleIdToOffers = offeredMapIndexToTaskAttemptIds.get(appId);
+    if (shuffleIdToOffers == null) {
+      throw new RssException("appId[" + appId + "] is expired!");
+    }
+    shuffleIdToOffers.computeIfAbsent(shuffleId, key -> JavaUtils.newConcurrentMap());
+    Map<Integer, Long> offeredMapIndexToTaskAttemptIds = shuffleIdToOffers.get(shuffleId);
+    Long offered = offeredMapIndexToTaskAttemptIds.get(mapIndex);
+    // if there is no offer, it might have been committed already,
+    // or another taskAttemptId offer has been accepted
+    if (offered == null && !taskAttemptIds.contains(taskAttemptId)
+        || offered != null && offered != taskAttemptId) {
+      throw new RssException(
+          "committing taskAttempId["
+              + taskAttemptId
+              + "] for mapIndex ["
+              + mapIndex
+              + "] has not been granted!");
+    }
+
+    // memorize taskAttempId to answer getTaskAttemptIds
+    synchronized (taskAttemptIds) {
+      taskAttemptIds.addLong(taskAttemptId);
+    }
+
+    // remove offer
+    offeredMapIndexToTaskAttemptIds.remove(mapIndex);
+
+    // now we are safe to add the finished block ids
+    addFinishedBlockIds(appId, shuffleId, partitionToBlockIds, bitmapNum);
+  }
+
+  public byte[] getTaskAttemptIds(String appId, Integer shuffleId) throws IOException {
+    refreshAppId(appId);
+
+    // get taskAttemptIds of this shuffle
+    Map<Integer, Roaring64NavigableMap> shuffleIdToPartitions = committedTaskAttemptIds.get(appId);
+    if (shuffleIdToPartitions == null) {
+      throw new RssException("appId[" + appId + "] is expired!");
+    }
+    shuffleIdToPartitions.computeIfAbsent(shuffleId, key -> new Roaring64NavigableMap());
+    Roaring64NavigableMap taskAttemptIds = shuffleIdToPartitions.get(shuffleId);
+
+    // it should be safe to serialize this because all commits have been done by now
+    return RssUtils.serializeBitMap(taskAttemptIds);
   }
 
   public int updateAndGetCommitCount(String appId, int shuffleId) {
@@ -755,6 +842,8 @@ public class ShuffleTaskManager {
       final Map<Integer, Roaring64NavigableMap> shuffleToCachedBlockIds =
           shuffleTaskInfo.getCachedBlockIds();
       partitionsToBlockIds.remove(appId);
+      offeredMapIndexToTaskAttemptIds.remove(appId);
+      committedTaskAttemptIds.remove(appId);
       shuffleBufferManager.removeBuffer(appId);
       shuffleFlushManager.removeResources(appId);
       if (!shuffleToCachedBlockIds.isEmpty()) {
@@ -842,6 +931,11 @@ public class ShuffleTaskManager {
   @VisibleForTesting
   public Map<String, Map<Integer, Roaring64NavigableMap[]>> getPartitionsToBlockIds() {
     return partitionsToBlockIds;
+  }
+
+  @VisibleForTesting
+  public Map<String, Map<Integer, Map<Integer, Long>>> getOfferedMapIndexToTaskAttemptIds() {
+    return offeredMapIndexToTaskAttemptIds;
   }
 
   public void removeShuffleDataAsync(String appId, int shuffleId) {

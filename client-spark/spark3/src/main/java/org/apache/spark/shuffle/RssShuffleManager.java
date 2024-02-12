@@ -30,16 +30,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
-import scala.Tuple2;
-import scala.Tuple3;
-import scala.collection.Iterator;
-import scala.collection.Seq;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.spark.MapOutputTracker;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
@@ -53,8 +46,6 @@ import org.apache.spark.shuffle.writer.AddBlockEvent;
 import org.apache.spark.shuffle.writer.DataPusher;
 import org.apache.spark.shuffle.writer.RssShuffleWriter;
 import org.apache.spark.sql.internal.SQLConf;
-import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.BlockManagerId;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -547,31 +538,8 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       int endPartition,
       TaskContext context,
       ShuffleReadMetricsReporter metrics) {
-    long start = System.currentTimeMillis();
-    Roaring64NavigableMap taskIdBitmap =
-        getExpectedTasksByExecutorId(
-            handle.shuffleId(), startPartition, endPartition, startMapIndex, endMapIndex);
-    LOG.info(
-        "Get taskId cost "
-            + (System.currentTimeMillis() - start)
-            + " ms, and request expected blockIds from "
-            + taskIdBitmap.getLongCardinality()
-            + " tasks for shuffleId["
-            + handle.shuffleId()
-            + "], partitionId["
-            + startPartition
-            + ", "
-            + endPartition
-            + "]");
     return getReaderImpl(
-        handle,
-        startMapIndex,
-        endMapIndex,
-        startPartition,
-        endPartition,
-        context,
-        metrics,
-        taskIdBitmap);
+        handle, startMapIndex, endMapIndex, startPartition, endPartition, context, metrics);
   }
 
   // The interface is used for compatibility with spark 3.0.1
@@ -583,31 +551,8 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       int endPartition,
       TaskContext context,
       ShuffleReadMetricsReporter metrics) {
-    long start = System.currentTimeMillis();
-    Roaring64NavigableMap taskIdBitmap =
-        getExpectedTasksByRange(
-            handle.shuffleId(), startPartition, endPartition, startMapIndex, endMapIndex);
-    LOG.info(
-        "Get taskId cost "
-            + (System.currentTimeMillis() - start)
-            + " ms, and request expected blockIds from "
-            + taskIdBitmap.getLongCardinality()
-            + " tasks for shuffleId["
-            + handle.shuffleId()
-            + "], partitionId["
-            + startPartition
-            + ", "
-            + endPartition
-            + "]");
     return getReaderImpl(
-        handle,
-        startMapIndex,
-        endMapIndex,
-        startPartition,
-        endPartition,
-        context,
-        metrics,
-        taskIdBitmap);
+        handle, startMapIndex, endMapIndex, startPartition, endPartition, context, metrics);
   }
 
   public <K, C> ShuffleReader<K, C> getReaderImpl(
@@ -617,8 +562,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       int startPartition,
       int endPartition,
       TaskContext context,
-      ShuffleReadMetricsReporter metrics,
-      Roaring64NavigableMap taskIdBitmap) {
+      ShuffleReadMetricsReporter metrics) {
     if (!(handle instanceof RssShuffleHandle)) {
       throw new RssException("Unexpected ShuffleHandle:" + handle.getClass().getName());
     }
@@ -694,6 +638,26 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       }
     }
 
+    start = System.currentTimeMillis();
+    Roaring64NavigableMap taskIdBitmap =
+        getExpectedTasksByRange(
+            rssShuffleHandle.getAppId(),
+            handle.shuffleId(),
+            serverToPartitions.keySet(),
+            context.stageId());
+    LOG.info(
+        "Get taskId cost "
+            + (System.currentTimeMillis() - start)
+            + " ms, and get "
+            + taskIdBitmap.getLongCardinality()
+            + " taskAttemptIds for shuffleId["
+            + handle.shuffleId()
+            + "], partitionId["
+            + startPartition
+            + ", "
+            + endPartition
+            + "]");
+
     ShuffleReadMetrics readMetrics;
     if (metrics != null) {
       readMetrics = new ReadMetrics(metrics);
@@ -725,117 +689,14 @@ public class RssShuffleManager extends RssShuffleManagerBase {
         allPartitionToServers);
   }
 
-  @SuppressFBWarnings("REC_CATCH_EXCEPTION")
-  private Roaring64NavigableMap getExpectedTasksByExecutorId(
-      int shuffleId, int startPartition, int endPartition, int startMapIndex, int endMapIndex) {
-    Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf();
-    Iterator<Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>>> mapStatusIter = null;
-    // Since Spark 3.1 refactors the interface of getMapSizesByExecutorId,
-    // we use reflection and catch for the compatibility with 3.0 & 3.1 & 3.2
-    try {
-      // attempt to use Spark 3.1's API
-      mapStatusIter =
-          (Iterator<Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>>>)
-              SparkEnv.get()
-                  .mapOutputTracker()
-                  .getClass()
-                  .getDeclaredMethod(
-                      "getMapSizesByExecutorId",
-                      int.class,
-                      int.class,
-                      int.class,
-                      int.class,
-                      int.class)
-                  .invoke(
-                      SparkEnv.get().mapOutputTracker(),
-                      shuffleId,
-                      startMapIndex,
-                      endMapIndex,
-                      startPartition,
-                      endPartition);
-    } catch (Exception ignored) {
-      // fallback and attempt to use Spark 3.0's API
-      try {
-        mapStatusIter =
-            (Iterator<Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>>>)
-                SparkEnv.get()
-                    .mapOutputTracker()
-                    .getClass()
-                    .getDeclaredMethod("getMapSizesByExecutorId", int.class, int.class, int.class)
-                    .invoke(
-                        SparkEnv.get().mapOutputTracker(), shuffleId, startPartition, endPartition);
-      } catch (Exception ignored1) {
-        try {
-          // attempt to use Spark 3.2.0's API
-          // Each Spark release will be versioned: [MAJOR].[FEATURE].[MAINTENANCE].
-          // Usually we only need to adapt [MAJOR].[FEATURE] . Unfortunately,
-          // some interfaces were removed wrongly in Spark 3.2.0. And they were added by Spark
-          // 3.2.1.
-          // So we need to adapt Spark 3.2.0 here
-          mapStatusIter =
-              (Iterator<Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>>>)
-                  MapOutputTracker.class
-                      .getDeclaredMethod(
-                          "getMapSizesByExecutorId",
-                          int.class,
-                          int.class,
-                          int.class,
-                          int.class,
-                          int.class)
-                      .invoke(
-                          SparkEnv.get().mapOutputTracker(),
-                          shuffleId,
-                          startMapIndex,
-                          endMapIndex,
-                          startPartition,
-                          endPartition);
-        } catch (Exception e) {
-          throw new RssException(e);
-        }
-      }
-    }
-    while (mapStatusIter.hasNext()) {
-      Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>> tuple2 = mapStatusIter.next();
-      if (!tuple2._1().topologyInfo().isDefined()) {
-        throw new RssException("Can't get expected taskAttemptId");
-      }
-      taskIdBitmap.add(Long.parseLong(tuple2._1().topologyInfo().get()));
-    }
-    return taskIdBitmap;
-  }
-
-  // This API is only used by Spark3.0 and removed since 3.1,
-  // so we extract it from getExpectedTasksByExecutorId.
   private Roaring64NavigableMap getExpectedTasksByRange(
-      int shuffleId, int startPartition, int endPartition, int startMapIndex, int endMapIndex) {
-    Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf();
-    Iterator<Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>>> mapStatusIter = null;
+      String appId, int shuffleId, Set<ShuffleServerInfo> servers, int stageAttemptId) {
     try {
-      mapStatusIter =
-          (Iterator<Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>>>)
-              SparkEnv.get()
-                  .mapOutputTracker()
-                  .getClass()
-                  .getDeclaredMethod(
-                      "getMapSizesByRange", int.class, int.class, int.class, int.class, int.class)
-                  .invoke(
-                      SparkEnv.get().mapOutputTracker(),
-                      shuffleId,
-                      startMapIndex,
-                      endMapIndex,
-                      startPartition,
-                      endPartition);
-    } catch (Exception e) {
-      throw new RssException(e);
+      return shuffleWriteClient.getShuffleTaskAttemptIds(clientType, servers, appId, shuffleId);
+    } catch (RssFetchFailedException e) {
+      throw RssSparkShuffleUtils.reportRssFetchFailedException(
+          e, sparkConf, appId, shuffleId, stageAttemptId, Sets.newHashSet());
     }
-    while (mapStatusIter.hasNext()) {
-      Tuple2<BlockManagerId, Seq<Tuple3<BlockId, Object, Object>>> tuple2 = mapStatusIter.next();
-      if (!tuple2._1().topologyInfo().isDefined()) {
-        throw new RssException("Can't get expected taskAttemptId");
-      }
-      taskIdBitmap.add(Long.parseLong(tuple2._1().topologyInfo().get()));
-    }
-    return taskIdBitmap;
   }
 
   @Override

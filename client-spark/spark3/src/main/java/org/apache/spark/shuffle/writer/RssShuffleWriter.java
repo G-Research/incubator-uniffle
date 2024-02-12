@@ -468,7 +468,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
         }
         long start = System.currentTimeMillis();
         shuffleWriteClient.reportShuffleResult(
-            partitionToServers, appId, shuffleId, taskAttemptId, ptb, bitmapSplitNum);
+            partitionToServers, appId, shuffleId, mapIndex, taskAttemptId, ptb, bitmapSplitNum);
         LOG.info(
             "Report shuffle result for task[{}] with bitmapNum[{}] cost {} ms",
             taskAttemptId,
@@ -481,7 +481,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
                 appId + "_" + taskId,
                 DUMMY_HOST,
                 DUMMY_PORT,
-                Option.apply(Long.toString(taskAttemptId)));
+                Option.empty());
         MapStatus mapStatus = MapStatus.apply(blockManagerId, partitionLengths, taskAttemptId);
         return Option.apply(mapStatus);
       } else {

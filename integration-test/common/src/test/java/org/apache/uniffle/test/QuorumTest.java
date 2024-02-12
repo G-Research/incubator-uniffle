@@ -369,7 +369,7 @@ public class QuorumTest extends ShuffleReadWriteBase {
     partitionToServers.put(
         0, Lists.newArrayList(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2));
     shuffleWriteClientImpl.reportShuffleResult(
-        partitionToServers, testAppId, 0, 0L, partitionToBlockIds, 1);
+        partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
     Roaring64NavigableMap report =
         shuffleWriteClientImpl.getShuffleResult(
             "GRPC",
@@ -448,10 +448,10 @@ public class QuorumTest extends ShuffleReadWriteBase {
         0, Lists.newArrayList(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2));
     try {
       shuffleWriteClientImpl.reportShuffleResult(
-          partitionToServers, testAppId, 0, 0L, partitionToBlockIds, 1);
+          partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
-      assertTrue(e.getMessage().startsWith("Quorum check of report shuffle result is failed"));
+      assertTrue(e.getMessage().startsWith("Quorum check of offer shuffle result is failed"));
     }
     //  get result should also fail
     try {
@@ -464,6 +464,17 @@ public class QuorumTest extends ShuffleReadWriteBase {
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
       assertTrue(e.getMessage().startsWith("Get shuffle result is failed"));
+    }
+    //  get taskAttemptIds should also fail
+    try {
+      shuffleWriteClientImpl.getShuffleTaskAttemptIds(
+          "GRPC",
+          Sets.newHashSet(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2),
+          testAppId,
+          0);
+      fail(EXPECTED_EXCEPTION_MESSAGE);
+    } catch (Exception e) {
+      assertTrue(e.getMessage().startsWith("Get shuffle taskAttemptIds is failed"));
     }
   }
 
@@ -508,7 +519,7 @@ public class QuorumTest extends ShuffleReadWriteBase {
     partitionToServers.put(
         0, Lists.newArrayList(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2));
     shuffleWriteClientImpl.reportShuffleResult(
-        partitionToServers, testAppId, 0, 0L, partitionToBlockIds, 1);
+        partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
 
     Roaring64NavigableMap report =
         shuffleWriteClientImpl.getShuffleResult(
@@ -609,7 +620,7 @@ public class QuorumTest extends ShuffleReadWriteBase {
     partitionToServers.put(
         0, Lists.newArrayList(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2));
     shuffleWriteClientImpl.reportShuffleResult(
-        partitionToServers, testAppId, 0, 0L, partitionToBlockIds, 1);
+        partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
     Roaring64NavigableMap report =
         shuffleWriteClientImpl.getShuffleResult(
             "GRPC",
@@ -719,10 +730,12 @@ public class QuorumTest extends ShuffleReadWriteBase {
     // report result should fail because partition2 is failed to report server 3,4
     try {
       shuffleWriteClientImpl.reportShuffleResult(
-          partitionToServers, testAppId, 0, 0L, partitionToBlockIds, 1);
+          partitionToServers, testAppId, 0, 0, 0L, partitionToBlockIds, 1);
       fail(EXPECTED_EXCEPTION_MESSAGE);
     } catch (Exception e) {
-      assertTrue(e.getMessage().startsWith("Quorum check of report shuffle result is failed"));
+      assertTrue(
+          e.getMessage().startsWith("Quorum check of offer shuffle result is failed"),
+          e.getMessage());
     }
   }
 

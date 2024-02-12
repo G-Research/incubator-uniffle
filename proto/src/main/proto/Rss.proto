@@ -33,8 +33,11 @@ service ShuffleServer {
   rpc getMemoryShuffleData (GetMemoryShuffleDataRequest) returns (GetMemoryShuffleDataResponse);
   rpc commitShuffleTask (ShuffleCommitRequest) returns (ShuffleCommitResponse);
   rpc reportShuffleResult (ReportShuffleResultRequest) returns (ReportShuffleResultResponse);
+  rpc offerShuffleResult (OfferShuffleResultRequest) returns (OfferShuffleResultResponse);
+  rpc commitShuffleResult (CommitShuffleResultRequest) returns (CommitShuffleResultResponse);
   rpc getShuffleResult (GetShuffleResultRequest) returns (GetShuffleResultResponse);
   rpc getShuffleResultForMultiPart (GetShuffleResultForMultiPartRequest) returns (GetShuffleResultForMultiPartResponse);
+  rpc getShuffleTaskAttemptIds (GetShuffleTaskAttemptIdsRequest) returns (GetShuffleTaskAttemptIdsResponse);
   rpc finishShuffle (FinishShuffleRequest) returns (FinishShuffleResponse);
   rpc requireBuffer (RequireBufferRequest) returns (RequireBufferResponse);
   rpc appHeartbeat(AppHeartBeatRequest) returns (AppHeartBeatResponse);
@@ -139,6 +142,32 @@ message ReportShuffleResultResponse {
   string retMsg = 2;
 }
 
+message OfferShuffleResultRequest {
+  string appId = 1;
+  int32 shuffleId = 2;
+  int32 mapIndex = 3;
+  int64 taskAttemptId = 4;
+}
+
+message OfferShuffleResultResponse {
+  StatusCode status = 1;
+  string retMsg = 2;
+}
+
+message CommitShuffleResultRequest {
+  string appId = 1;
+  int32 shuffleId = 2;
+  int32 mapIndex = 3;
+  int64 taskAttemptId = 4;
+  int32 bitmapNum = 5;
+  repeated PartitionToBlockIds partitionToBlockIds = 6;
+}
+
+message CommitShuffleResultResponse {
+  StatusCode status = 1;
+  string retMsg = 2;
+}
+
 message GetShuffleResultRequest {
   string appId = 1;
   int32 shuffleId = 2;
@@ -158,6 +187,17 @@ message GetShuffleResultForMultiPartRequest {
 }
 
 message GetShuffleResultForMultiPartResponse {
+  StatusCode status = 1;
+  string retMsg = 2;
+  bytes serializedBitmap = 3;
+}
+
+message GetShuffleTaskAttemptIdsRequest {
+  string appId = 1;
+  int32 shuffleId = 2;
+}
+
+message GetShuffleTaskAttemptIdsResponse {
   StatusCode status = 1;
   string retMsg = 2;
   bytes serializedBitmap = 3;
