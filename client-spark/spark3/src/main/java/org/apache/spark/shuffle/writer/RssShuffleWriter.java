@@ -88,6 +88,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   private final String appId;
   private final int shuffleId;
   private WriteBufferManager bufferManager;
+  private int mapIndex;
   private final String taskId;
   private final int numMaps;
   private final ShuffleDependency<K, V, C> shuffleDependency;
@@ -120,6 +121,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   public RssShuffleWriter(
       String appId,
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       WriteBufferManager bufferManager,
@@ -133,6 +135,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     this(
         appId,
         shuffleId,
+        mapIndex,
         taskId,
         taskAttemptId,
         shuffleWriteMetrics,
@@ -149,6 +152,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   private RssShuffleWriter(
       String appId,
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       ShuffleWriteMetrics shuffleWriteMetrics,
@@ -163,6 +167,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     this.shuffleManager = shuffleManager;
     this.appId = appId;
     this.shuffleId = shuffleId;
+    this.mapIndex = mapIndex;
     this.taskId = taskId;
     this.taskAttemptId = taskAttemptId;
     this.numMaps = rssHandle.getNumMaps();
@@ -189,6 +194,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   public RssShuffleWriter(
       String appId,
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       ShuffleWriteMetrics shuffleWriteMetrics,
@@ -202,6 +208,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     this(
         appId,
         shuffleId,
+        mapIndex,
         taskId,
         taskAttemptId,
         shuffleWriteMetrics,
@@ -216,6 +223,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     final WriteBufferManager bufferManager =
         new WriteBufferManager(
             shuffleId,
+            mapIndex,
             taskId,
             taskAttemptId,
             bufferOptions,
@@ -460,7 +468,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
         }
         long start = System.currentTimeMillis();
         shuffleWriteClient.reportShuffleResult(
-            partitionToServers, appId, shuffleId, taskAttemptId, ptb, bitmapSplitNum);
+            partitionToServers, appId, shuffleId, mapIndex, taskAttemptId, ptb, bitmapSplitNum);
         LOG.info(
             "Report shuffle result for task[{}] with bitmapNum[{}] cost {} ms",
             taskAttemptId,
@@ -473,7 +481,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
                 appId + "_" + taskId,
                 DUMMY_HOST,
                 DUMMY_PORT,
-                Option.apply(Long.toString(taskAttemptId)));
+                Option.empty());
         MapStatus mapStatus = MapStatus.apply(blockManagerId, partitionLengths, taskAttemptId);
         return Option.apply(mapStatus);
       } else {

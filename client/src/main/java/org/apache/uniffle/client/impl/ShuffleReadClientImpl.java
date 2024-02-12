@@ -23,7 +23,6 @@ import java.util.Queue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
 import org.apache.hadoop.conf.Configuration;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
@@ -33,7 +32,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.uniffle.client.api.ShuffleReadClient;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
 import org.apache.uniffle.client.response.CompressedShuffleBlock;
-import org.apache.uniffle.client.util.DefaultIdHelper;
 import org.apache.uniffle.common.BufferSegment;
 import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleDataResult;
@@ -68,10 +66,7 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
   private IdHelper idHelper;
 
   public ShuffleReadClientImpl(ShuffleClientFactory.ReadClientBuilder builder) {
-    // add default value
-    if (builder.getIdHelper() == null) {
-      builder.idHelper(new DefaultIdHelper());
-    }
+    // add default values
     if (builder.getShuffleDataDistributionType() == null) {
       builder.shuffleDataDistributionType(ShuffleDataDistributionType.NORMAL);
     }
@@ -147,18 +142,6 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
     }
     if (builder.isOffHeapEnable()) {
       request.enableOffHeap();
-    }
-
-    List<Long> removeBlockIds = Lists.newArrayList();
-    blockIdBitmap.forEach(
-        bid -> {
-          if (!taskIdBitmap.contains(idHelper.getTaskAttemptId(bid))) {
-            removeBlockIds.add(bid);
-          }
-        });
-
-    for (long rid : removeBlockIds) {
-      blockIdBitmap.removeLong(rid);
     }
 
     // copy blockIdBitmap to track all pending blocks

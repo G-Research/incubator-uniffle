@@ -20,7 +20,7 @@ use crate::app::{
     PartitionedUId, PurgeDataContext, ReadingIndexViewContext, ReadingViewContext,
     RegisterAppContext, ReleaseBufferContext, RequireBufferContext, WritingViewContext,
 };
-use crate::config::LocalfileStoreConfig;
+use crate::config::{LocalfileStoreConfig, StorageType};
 use crate::error::WorkerError;
 use crate::metric::TOTAL_LOCALFILE_USED;
 use crate::store::ResponseDataIndex::Local;
@@ -40,6 +40,7 @@ use dashmap::DashMap;
 use log::{debug, error, warn};
 
 use crate::runtime::manager::RuntimeManager;
+use dashmap::mapref::entry::Entry;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
@@ -187,14 +188,16 @@ impl Store for LocalFileStore {
             LocalFileStore::gen_relative_path_for_partition(&uid);
 
         let mut parent_dir_is_created = false;
-        let locked_obj = self
-            .partition_locks
-            .entry(data_file_path.clone())
-            .or_insert_with(|| {
+        let locked_obj = match self.partition_locks.entry(data_file_path.clone()) {
+            Entry::Vacant(e) => {
                 parent_dir_is_created = true;
-                Arc::new(LockedObj::from(self.select_disk(&uid).unwrap()))
-            })
-            .clone();
+                let disk = self.select_disk(&uid)?;
+                let locked_obj = Arc::new(LockedObj::from(disk));
+                let obj = e.insert_entry(locked_obj.clone());
+                obj.get().clone()
+            }
+            Entry::Occupied(v) => v.get().clone(),
+        };
 
         let local_disk = &locked_obj.disk;
         let mut next_offset = locked_obj.pointer.load(Ordering::SeqCst);
@@ -414,6 +417,10 @@ impl Store for LocalFileStore {
 
     async fn register_app(&self, _ctx: RegisterAppContext) -> Result<()> {
         Ok(())
+    }
+
+    async fn name(&self) -> StorageType {
+        StorageType::LOCALFILE
     }
 }
 

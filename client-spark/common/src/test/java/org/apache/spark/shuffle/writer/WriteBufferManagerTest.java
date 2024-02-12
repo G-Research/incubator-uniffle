@@ -63,6 +63,7 @@ public class WriteBufferManagerTest {
         new WriteBufferManager(
             0,
             0,
+            0,
             bufferOptions,
             kryoSerializer,
             Maps.newHashMap(),
@@ -202,6 +203,7 @@ public class WriteBufferManagerTest {
         new WriteBufferManager(
             0,
             0,
+            0,
             bufferOptions,
             null,
             Maps.newHashMap(),
@@ -257,6 +259,7 @@ public class WriteBufferManagerTest {
         new WriteBufferManager(
             0,
             0,
+            0,
             bufferOptions,
             new KryoSerializer(conf),
             Maps.newHashMap(),
@@ -281,6 +284,7 @@ public class WriteBufferManagerTest {
 
     WriteBufferManager wbm =
         new WriteBufferManager(
+            0,
             0,
             "taskId_spillByOthersTest",
             0,
@@ -314,6 +318,7 @@ public class WriteBufferManagerTest {
 
     WriteBufferManager wbm =
         new WriteBufferManager(
+            0,
             0,
             "taskId_spillTest",
             0,
@@ -437,6 +442,7 @@ public class WriteBufferManagerTest {
     WriteBufferManager wbm =
         new WriteBufferManager(
             0,
+            0,
             "taskId_spillTest",
             0,
             bufferOptions,
@@ -484,5 +490,18 @@ public class WriteBufferManagerTest {
 
     assertEquals(3, fakedTaskMemoryManager.getInvokedCnt());
     assertEquals(2, fakedTaskMemoryManager.getSpilledCnt());
+  }
+
+  @Test
+  public void addFirstRecordWithLargeSizeTest() {
+    SparkConf conf = getConf();
+    WriteBufferManager wbm = createManager(conf);
+    String testKey = "key";
+    String testValue = "~~~~~~~~~~~~~~~~~~~~This is a long text~~~~~~~~~~~~~~~~~~~~";
+    List<ShuffleBlockInfo> shuffleBlockInfos = wbm.addRecord(0, testKey, testValue);
+    assertEquals(1, shuffleBlockInfos.size());
+    String testValue2 = "This is a short text";
+    List<ShuffleBlockInfo> shuffleBlockInfos2 = wbm.addRecord(1, testKey, testValue2);
+    assertEquals(0, shuffleBlockInfos2.size());
   }
 }

@@ -15,14 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.uniffle.client.util;
+package org.apache.uniffle.server.event;
 
-import org.apache.uniffle.common.util.Constants;
-import org.apache.uniffle.common.util.IdHelper;
-
-public class DefaultIdHelper implements IdHelper {
-  @Override
-  public long getTaskAttemptId(long blockId) {
-    return blockId & Constants.MAX_TASK_ATTEMPT_ID;
+public class AppUnregisterPurgeEvent extends PurgeEvent {
+  public AppUnregisterPurgeEvent(String appId, String user) {
+    super(appId, user, null);
   }
 }

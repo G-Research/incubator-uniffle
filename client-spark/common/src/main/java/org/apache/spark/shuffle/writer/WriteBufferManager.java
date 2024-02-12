@@ -69,6 +69,7 @@ public class WriteBufferManager extends MemoryConsumer {
   private Map<Integer, Integer> partitionToSeqNo = Maps.newHashMap();
   private long askExecutorMemory;
   private int shuffleId;
+  private int mapIndex;
   private String taskId;
   private long taskAttemptId;
   private SerializerInstance instance;
@@ -98,6 +99,7 @@ public class WriteBufferManager extends MemoryConsumer {
 
   public WriteBufferManager(
       int shuffleId,
+      int mapIndex,
       long taskAttemptId,
       BufferManagerOptions bufferManagerOptions,
       Serializer serializer,
@@ -107,6 +109,7 @@ public class WriteBufferManager extends MemoryConsumer {
       RssConf rssConf) {
     this(
         shuffleId,
+        mapIndex,
         null,
         taskAttemptId,
         bufferManagerOptions,
@@ -120,6 +123,7 @@ public class WriteBufferManager extends MemoryConsumer {
 
   public WriteBufferManager(
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       BufferManagerOptions bufferManagerOptions,
@@ -134,6 +138,7 @@ public class WriteBufferManager extends MemoryConsumer {
     this.spillSize = bufferManagerOptions.getBufferSpillThreshold();
     this.buffers = Maps.newHashMap();
     this.shuffleId = shuffleId;
+    this.mapIndex = mapIndex;
     this.taskId = taskId;
     this.taskAttemptId = taskAttemptId;
     this.partitionToServers = partitionToServers;
@@ -201,39 +206,25 @@ public class WriteBufferManager extends MemoryConsumer {
     // this may trigger current WriteBufferManager spill method, which will
     // make the current write buffer discard. So we have to recheck the buffer existence.
     boolean hasRequested = false;
-    if (buffers.containsKey(partitionId)) {
-      WriterBuffer wb = buffers.get(partitionId);
+    WriterBuffer wb = buffers.get(partitionId);
+    if (wb != null) {
       if (wb.askForMemory(serializedDataLength)) {
         requestMemory(required);
         hasRequested = true;
       }
     }
 
-    if (buffers.containsKey(partitionId)) {
+    // hasRequested is not true means spill method was not trigger,
+    // and we don't have to recheck the buffer existence in this case.
+    if (hasRequested) {
+      wb = buffers.get(partitionId);
+    }
+
+    if (wb != null) {
       if (hasRequested) {
         usedBytes.addAndGet(required);
       }
-      WriterBuffer wb = buffers.get(partitionId);
       wb.addRecord(serializedData, serializedDataLength);
-      if (wb.getMemoryUsed() > bufferSize) {
-        List<ShuffleBlockInfo> sentBlocks = new ArrayList<>(1);
-        sentBlocks.add(createShuffleBlock(partitionId, wb));
-        copyTime += wb.getCopyTime();
-        buffers.remove(partitionId);
-        if (LOG.isDebugEnabled()) {
-          LOG.debug(
-              "Single buffer is full for shuffleId["
-                  + shuffleId
-                  + "] partition["
-                  + partitionId
-                  + "] with memoryUsed["
-                  + wb.getMemoryUsed()
-                  + "], dataLength["
-                  + wb.getDataLength()
-                  + "]");
-        }
-        return sentBlocks;
-      }
     } else {
       // The true of hasRequested means the former partitioned buffer has been flushed, that is
       // triggered by the spill operation caused by asking for memory. So it needn't to re-request
@@ -242,10 +233,29 @@ public class WriteBufferManager extends MemoryConsumer {
         requestMemory(required);
       }
       usedBytes.addAndGet(required);
-
-      WriterBuffer wb = new WriterBuffer(bufferSegmentSize);
+      wb = new WriterBuffer(bufferSegmentSize);
       wb.addRecord(serializedData, serializedDataLength);
       buffers.put(partitionId, wb);
+    }
+
+    if (wb.getMemoryUsed() > bufferSize) {
+      List<ShuffleBlockInfo> sentBlocks = new ArrayList<>(1);
+      sentBlocks.add(createShuffleBlock(partitionId, wb));
+      copyTime += wb.getCopyTime();
+      buffers.remove(partitionId);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(
+            "Single buffer is full for shuffleId["
+                + shuffleId
+                + "] partition["
+                + partitionId
+                + "] with memoryUsed["
+                + wb.getMemoryUsed()
+                + "], dataLength["
+                + wb.getDataLength()
+                + "]");
+      }
+      return sentBlocks;
     }
     return Collections.emptyList();
   }
@@ -320,8 +330,7 @@ public class WriteBufferManager extends MemoryConsumer {
       compressTime += System.currentTimeMillis() - start;
     }
     final long crc32 = ChecksumUtils.getCrc32(compressed);
-    final long blockId =
-        ClientUtils.getBlockId(partitionId, taskAttemptId, getNextSeqNo(partitionId));
+    final long blockId = ClientUtils.getBlockId(partitionId, mapIndex, getNextSeqNo(partitionId));
     uncompressedDataLen += data.length;
     shuffleWriteMetrics.incBytesWritten(compressed.length);
     // add memory to indicate bytes which will be sent to shuffle server

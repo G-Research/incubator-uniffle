@@ -27,11 +27,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import scala.Option;
-import scala.Tuple2;
-import scala.collection.Iterator;
-import scala.collection.Seq;
+import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
@@ -48,8 +44,6 @@ import org.apache.spark.shuffle.reader.RssShuffleReader;
 import org.apache.spark.shuffle.writer.AddBlockEvent;
 import org.apache.spark.shuffle.writer.DataPusher;
 import org.apache.spark.shuffle.writer.RssShuffleWriter;
-import org.apache.spark.storage.BlockId;
-import org.apache.spark.storage.BlockManagerId;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -465,6 +459,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       return new RssShuffleWriter<>(
           rssHandle.getAppId(),
           shuffleId,
+          context.partitionId(),
           taskId,
           context.taskAttemptId(),
           writeMetrics,
@@ -489,20 +484,35 @@ public class RssShuffleManager extends RssShuffleManagerBase {
       RssShuffleHandle<K, C, ?> rssShuffleHandle = (RssShuffleHandle<K, C, ?>) handle;
       final int partitionNumPerRange = sparkConf.get(RssSparkConfig.RSS_PARTITION_NUM_PER_RANGE);
       final int partitionNum = rssShuffleHandle.getDependency().partitioner().numPartitions();
+      Map<Integer, List<ShuffleServerInfo>> allPartitionToServers =
+          rssShuffleHandle.getPartitionToServers();
+      Map<Integer, List<ShuffleServerInfo>> requirePartitionToServers =
+          allPartitionToServers.entrySet().stream()
+              .filter(x -> x.getKey() >= startPartition && x.getKey() < endPartition)
+              .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+      Map<ShuffleServerInfo, Set<Integer>> serverToPartitions =
+          RssUtils.generateServerToPartitions(requirePartitionToServers);
       int shuffleId = rssShuffleHandle.getShuffleId();
       long start = System.currentTimeMillis();
       Roaring64NavigableMap taskIdBitmap =
-          getExpectedTasks(shuffleId, startPartition, endPartition);
+          getExpectedTasks(
+              rssShuffleHandle.getAppId(),
+              handle.shuffleId(),
+              serverToPartitions.keySet(),
+              context.stageId());
       LOG.info(
           "Get taskId cost "
               + (System.currentTimeMillis() - start)
-              + " ms, and request expected blockIds from "
+              + " ms, and get "
               + taskIdBitmap.getLongCardinality()
-              + " tasks for shuffleId["
-              + shuffleId
+              + " taskAttemptIds for shuffleId["
+              + handle.shuffleId()
               + "], partitionId["
               + startPartition
+              + ", "
+              + endPartition
               + "]");
+
       start = System.currentTimeMillis();
       ShuffleHandleInfo shuffleHandleInfo;
       if (rssResubmitStage) {
@@ -614,26 +624,13 @@ public class RssShuffleManager extends RssShuffleManagerBase {
   // when speculation enable, duplicate data will be sent and reported to shuffle server,
   // get the actual tasks and filter the duplicate data caused by speculation task
   private Roaring64NavigableMap getExpectedTasks(
-      int shuffleId, int startPartition, int endPartition) {
-    Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf();
-    // In 2.3, getMapSizesByExecutorId returns Seq, while it returns Iterator in 2.4,
-    // so we use toIterator() to support Spark 2.3 & 2.4
-    Iterator<Tuple2<BlockManagerId, Seq<Tuple2<BlockId, Object>>>> mapStatusIter =
-        SparkEnv.get()
-            .mapOutputTracker()
-            .getMapSizesByExecutorId(shuffleId, startPartition, endPartition)
-            .toIterator();
-    while (mapStatusIter.hasNext()) {
-      Tuple2<BlockManagerId, Seq<Tuple2<BlockId, Object>>> tuple2 = mapStatusIter.next();
-      Option<String> topologyInfo = tuple2._1().topologyInfo();
-      if (topologyInfo.isDefined()) {
-        taskIdBitmap.addLong(Long.parseLong(tuple2._1().topologyInfo().get()));
-      } else {
-        throw new RssException("Can't get expected taskAttemptId");
-      }
+      String appId, int shuffleId, Set<ShuffleServerInfo> servers, int stageAttemptId) {
+    try {
+      return shuffleWriteClient.getShuffleTaskAttemptIds(clientType, servers, appId, shuffleId);
+    } catch (RssFetchFailedException e) {
+      throw RssSparkShuffleUtils.reportRssFetchFailedException(
+          e, sparkConf, appId, shuffleId, stageAttemptId, Sets.newHashSet());
     }
-    LOG.info("Got result from MapStatus for expected tasks " + taskIdBitmap.getLongCardinality());
-    return taskIdBitmap;
   }
 
   public Set<Long> getFailedBlockIds(String taskId) {

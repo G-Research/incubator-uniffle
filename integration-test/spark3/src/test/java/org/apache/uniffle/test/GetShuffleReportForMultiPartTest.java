@@ -43,7 +43,6 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.util.JavaUtils;
@@ -252,8 +251,7 @@ public class GetShuffleReportForMultiPartTest extends SparkIntegrationTestBase {
         int startPartition,
         int endPartition,
         TaskContext context,
-        ShuffleReadMetricsReporter metrics,
-        Roaring64NavigableMap taskIdBitmap) {
+        ShuffleReadMetricsReporter metrics) {
       int shuffleId = handle.shuffleId();
       RssShuffleHandle<?, ?, ?> rssShuffleHandle = (RssShuffleHandle<?, ?, ?>) handle;
       Map<Integer, List<ShuffleServerInfo>> allPartitionToServers =
@@ -267,14 +265,7 @@ public class GetShuffleReportForMultiPartTest extends SparkIntegrationTestBase {
           shuffleToPartShouldRequestNum.computeIfAbsent(shuffleId, x -> new AtomicInteger(0));
       partShouldRequestNum.addAndGet(partitionNum);
       return super.getReaderImpl(
-          handle,
-          startMapIndex,
-          endMapIndex,
-          startPartition,
-          endPartition,
-          context,
-          metrics,
-          taskIdBitmap);
+          handle, startMapIndex, endMapIndex, startPartition, endPartition, context, metrics);
     }
 
     public Map<Integer, AtomicInteger> getShuffleIdToPartitionNum() {

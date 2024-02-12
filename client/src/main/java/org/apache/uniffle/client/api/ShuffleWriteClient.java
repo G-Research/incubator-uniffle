@@ -65,9 +65,13 @@ public interface ShuffleWriteClient {
       Map<Integer, List<ShuffleServerInfo>> partitionToServers,
       String appId,
       int shuffleId,
+      int mapIndex,
       long taskAttemptId,
       Map<Integer, List<Long>> partitionToBlockIds,
       int bitmapNum);
+
+  Roaring64NavigableMap getShuffleTaskAttemptIds(
+      String clientType, Set<ShuffleServerInfo> servers, String appId, int shuffleId);
 
   default ShuffleAssignmentsInfo getShuffleAssignments(
       String appId,

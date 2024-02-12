@@ -56,6 +56,8 @@ import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.proto.RssProtos;
 import org.apache.uniffle.proto.RssProtos.AppHeartBeatRequest;
 import org.apache.uniffle.proto.RssProtos.AppHeartBeatResponse;
+import org.apache.uniffle.proto.RssProtos.CommitShuffleResultRequest;
+import org.apache.uniffle.proto.RssProtos.CommitShuffleResultResponse;
 import org.apache.uniffle.proto.RssProtos.FinishShuffleRequest;
 import org.apache.uniffle.proto.RssProtos.FinishShuffleResponse;
 import org.apache.uniffle.proto.RssProtos.GetLocalShuffleDataRequest;
@@ -68,6 +70,9 @@ import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultResponse;
+import org.apache.uniffle.proto.RssProtos.GetShuffleTaskAttemptIdsResponse;
+import org.apache.uniffle.proto.RssProtos.OfferShuffleResultRequest;
+import org.apache.uniffle.proto.RssProtos.OfferShuffleResultResponse;
 import org.apache.uniffle.proto.RssProtos.PartitionToBlockIds;
 import org.apache.uniffle.proto.RssProtos.RemoteStorageConfItem;
 import org.apache.uniffle.proto.RssProtos.ReportShuffleResultRequest;
@@ -97,6 +102,30 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
 
   public ShuffleServerGrpcService(ShuffleServer shuffleServer) {
     this.shuffleServer = shuffleServer;
+  }
+
+  @Override
+  public void unregisterShuffleByAppId(
+      RssProtos.ShuffleUnregisterByAppIdRequest request,
+      StreamObserver<RssProtos.ShuffleUnregisterByAppIdResponse> responseStreamObserver) {
+    String appId = request.getAppId();
+
+    StatusCode result = StatusCode.SUCCESS;
+    String responseMessage = "OK";
+    try {
+      shuffleServer.getShuffleTaskManager().removeShuffleDataAsync(appId);
+
+    } catch (Exception e) {
+      result = StatusCode.INTERNAL_ERROR;
+    }
+
+    RssProtos.ShuffleUnregisterByAppIdResponse reply =
+        RssProtos.ShuffleUnregisterByAppIdResponse.newBuilder()
+            .setStatus(result.toProto())
+            .setRetMsg(responseMessage)
+            .build();
+    responseStreamObserver.onNext(reply);
+    responseStreamObserver.onCompleted();
   }
 
   @Override
@@ -493,6 +522,98 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
   }
 
   @Override
+  public void offerShuffleResult(
+      OfferShuffleResultRequest request,
+      StreamObserver<OfferShuffleResultResponse> responseObserver) {
+    String appId = request.getAppId();
+    int shuffleId = request.getShuffleId();
+    int mapIndex = request.getMapIndex();
+    long taskAttemptId = request.getTaskAttemptId();
+    StatusCode status = StatusCode.SUCCESS;
+    String msg = "OK";
+    OfferShuffleResultResponse reply;
+    String requestInfo =
+        "appId["
+            + appId
+            + "], shuffleId["
+            + shuffleId
+            + "], mapIndex["
+            + mapIndex
+            + "], taskAttemptId["
+            + taskAttemptId
+            + "]";
+
+    try {
+      LOG.info("Offer blocks as shuffle result for the task of " + requestInfo);
+      Long granted =
+          shuffleServer
+              .getShuffleTaskManager()
+              .offerTaskAttemptIdForMapIndex(appId, shuffleId, mapIndex, taskAttemptId);
+      if (granted != null && !granted.equals(taskAttemptId)) {
+        status = StatusCode.DOUBLE_REGISTER;
+        msg = "Offer " + requestInfo + "rejected, granted earlier to taskAttemptId " + granted;
+        LOG.info(msg);
+      }
+    } catch (Exception e) {
+      status = StatusCode.INTERNAL_ERROR;
+      msg = "error happened when offer shuffle result, check shuffle server for detail";
+      LOG.error("Error happened when offer shuffle result for " + requestInfo, e);
+    }
+
+    reply =
+        OfferShuffleResultResponse.newBuilder().setStatus(status.toProto()).setRetMsg(msg).build();
+    responseObserver.onNext(reply);
+    responseObserver.onCompleted();
+  }
+
+  @Override
+  public void commitShuffleResult(
+      CommitShuffleResultRequest request,
+      StreamObserver<CommitShuffleResultResponse> responseObserver) {
+    String appId = request.getAppId();
+    int shuffleId = request.getShuffleId();
+    int mapIndex = request.getMapIndex();
+    long taskAttemptId = request.getTaskAttemptId();
+    int bitmapNum = request.getBitmapNum();
+    Map<Integer, long[]> partitionToBlockIds =
+        toPartitionBlocksMap(request.getPartitionToBlockIdsList());
+    StatusCode status = StatusCode.SUCCESS;
+    String msg = "OK";
+    CommitShuffleResultResponse reply;
+    String requestInfo =
+        "appId["
+            + appId
+            + "], shuffleId["
+            + shuffleId
+            + "], mapIndex["
+            + mapIndex
+            + "], taskAttemptId["
+            + taskAttemptId
+            + "]";
+
+    try {
+      LOG.info(
+          "Commit "
+              + partitionToBlockIds.size()
+              + " blocks as shuffle result for the task of "
+              + requestInfo);
+      shuffleServer
+          .getShuffleTaskManager()
+          .commitFinishedBlockIds(
+              appId, shuffleId, mapIndex, taskAttemptId, partitionToBlockIds, bitmapNum);
+    } catch (Exception e) {
+      status = StatusCode.INTERNAL_ERROR;
+      msg = "error happened when commit shuffle result, check shuffle server for detail";
+      LOG.error("Error happened when commit shuffle result for " + requestInfo, e);
+    }
+
+    reply =
+        CommitShuffleResultResponse.newBuilder().setStatus(status.toProto()).setRetMsg(msg).build();
+    responseObserver.onNext(reply);
+    responseObserver.onCompleted();
+  }
+
+  @Override
   public void getShuffleResult(
       GetShuffleResultRequest request, StreamObserver<GetShuffleResultResponse> responseObserver) {
     String appId = request.getAppId();
@@ -570,6 +691,45 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
 
     reply =
         GetShuffleResultForMultiPartResponse.newBuilder()
+            .setStatus(status.toProto())
+            .setRetMsg(msg)
+            .setSerializedBitmap(serializedBlockIdsBytes)
+            .build();
+    responseObserver.onNext(reply);
+    responseObserver.onCompleted();
+  }
+
+  @Override
+  public void getShuffleTaskAttemptIds(
+      RssProtos.GetShuffleTaskAttemptIdsRequest request,
+      StreamObserver<RssProtos.GetShuffleTaskAttemptIdsResponse> responseObserver) {
+    String appId = request.getAppId();
+    int shuffleId = request.getShuffleId();
+    StatusCode status = StatusCode.SUCCESS;
+    String msg = "OK";
+    GetShuffleTaskAttemptIdsResponse reply;
+    byte[] serializedBlockIds = null;
+    String requestInfo = "appId[" + appId + "], shuffleId[" + shuffleId + "]";
+    ByteString serializedBlockIdsBytes = ByteString.EMPTY;
+
+    try {
+      serializedBlockIds =
+          shuffleServer.getShuffleTaskManager().getTaskAttemptIds(appId, shuffleId);
+      if (serializedBlockIds == null) {
+        status = StatusCode.INTERNAL_ERROR;
+        msg = "Can't get shuffle taskAttemptIds for " + requestInfo;
+        LOG.warn(msg);
+      } else {
+        serializedBlockIdsBytes = UnsafeByteOperations.unsafeWrap(serializedBlockIds);
+      }
+    } catch (Exception e) {
+      status = StatusCode.INTERNAL_ERROR;
+      msg = e.getMessage();
+      LOG.error("Error happened when get shuffle taskAttemptIds for {}", requestInfo, e);
+    }
+
+    reply =
+        GetShuffleTaskAttemptIdsResponse.newBuilder()
             .setStatus(status.toProto())
             .setRetMsg(msg)
             .setSerializedBitmap(serializedBlockIdsBytes)

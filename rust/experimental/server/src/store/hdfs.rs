@@ -19,7 +19,7 @@ use crate::app::{
     PartitionedUId, PurgeDataContext, ReadingIndexViewContext, ReadingViewContext,
     RegisterAppContext, ReleaseBufferContext, RequireBufferContext, WritingViewContext,
 };
-use crate::config::HdfsStoreConfig;
+use crate::config::{HdfsStoreConfig, StorageType};
 use crate::error::WorkerError;
 use std::collections::HashMap;
 
@@ -221,14 +221,14 @@ impl Store for HdfsStore {
     }
 
     async fn get(&self, _ctx: ReadingViewContext) -> Result<ResponseData, WorkerError> {
-        todo!()
+        Err(WorkerError::NOT_READ_HDFS_DATA_FROM_SERVER)
     }
 
     async fn get_index(
         &self,
         _ctx: ReadingIndexViewContext,
     ) -> Result<ResponseDataIndex, WorkerError> {
-        todo!()
+        Err(WorkerError::NOT_READ_HDFS_DATA_FROM_SERVER)
     }
 
     async fn require_buffer(
@@ -299,6 +299,10 @@ impl Store for HdfsStore {
             .entry(app_id)
             .or_insert_with(|| client);
         Ok(())
+    }
+
+    async fn name(&self) -> StorageType {
+        StorageType::HDFS
     }
 }
 
