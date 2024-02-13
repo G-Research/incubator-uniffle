@@ -118,7 +118,7 @@ public class HadoopShuffleReadHandlerTest extends HadoopTestBase {
     List<ShufflePartitionedBlock> blocks = Lists.newArrayList();
     byte[] buf = new byte[blockSize];
     new Random().nextBytes(buf);
-    long blockId = BlockId.getBlockId(expectTotalBlockNum, 0, taskAttemptId);
+    long blockId = BlockId.getBlockId(0, taskAttemptId, expectTotalBlockNum);
     blocks.add(
         new ShufflePartitionedBlock(
             blockSize, blockSize, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf));

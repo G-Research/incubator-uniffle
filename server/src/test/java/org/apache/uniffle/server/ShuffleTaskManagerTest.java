@@ -715,7 +715,7 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
     for (int taskId = 1; taskId < 10; taskId++) {
       for (int partitionId = 1; partitionId < 10; partitionId++) {
         for (int i = 0; i < 2; i++) {
-          long blockId = BlockId.getBlockId(i, partitionId, taskId);
+          long blockId = BlockId.getBlockId(partitionId, taskId, i);
           bitmapBlockIds.addLong(blockId);
           if (partitionId == expectedPartitionId) {
             expectedBlockIds.addLong(blockId);
@@ -736,7 +736,7 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
 
     long expectedBlockId =
         BlockId.getBlockId(
-            Constants.MAX_SEQUENCE_NO, Constants.MAX_PARTITION_ID, Constants.MAX_TASK_ATTEMPT_ID);
+            Constants.MAX_PARTITION_ID, Constants.MAX_TASK_ATTEMPT_ID, Constants.MAX_SEQUENCE_NO);
     bitmapBlockIds.addLong(expectedBlockId);
     resultBlockIds =
         shuffleTaskManager.getBlockIdsByPartitionId(
@@ -758,7 +758,7 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
     for (int taskId = 1; taskId < 10; taskId++) {
       for (int partitionId = 1; partitionId < 10; partitionId++) {
         for (int i = 0; i < 2; i++) {
-          long blockId = BlockId.getBlockId(i, partitionId, taskId);
+          long blockId = BlockId.getBlockId(partitionId, taskId, i);
           bitmapBlockIds.addLong(blockId);
           if (partitionId >= startPartition && partitionId <= endPartition) {
             expectedBlockIds.addLong(blockId);
@@ -831,7 +831,7 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
       long[] blockIds = new long[taskNum * blocksPerTask];
       for (int taskId = 0; taskId < taskNum; taskId++) {
         for (int i = 0; i < blocksPerTask; i++) {
-          long blockId = BlockId.getBlockId(i, partitionId, taskId);
+          long blockId = BlockId.getBlockId(partitionId, taskId, i);
           blockIds[taskId * blocksPerTask + i] = blockId;
         }
       }

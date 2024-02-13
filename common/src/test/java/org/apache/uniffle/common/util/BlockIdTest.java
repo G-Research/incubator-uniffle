@@ -27,26 +27,26 @@ public class BlockIdTest {
   @Test
   public void getBlockIdTest() {
     // max value of blockId
-    assertEquals(854558029292503039L, BlockId.getBlockId(24287, 16777215, 1048575));
+    assertEquals(854558029292503039L, BlockId.getBlockId(16777215, 1048575, 24287));
     // just a random test
     assertEquals(3518437418598500L, BlockId.getBlockId(100, 100, 100));
     // min value of blockId
     assertEquals(0L, BlockId.getBlockId(0, 0, 0));
 
     final Throwable e1 =
-        assertThrows(IllegalArgumentException.class, () -> BlockId.getBlockId(0, 16777216, 0));
+        assertThrows(IllegalArgumentException.class, () -> BlockId.getBlockId(16777216, 0, 0));
     assertTrue(
         e1.getMessage()
             .contains("Can't support partitionId[16777216], the max value should be 16777215"));
 
     final Throwable e2 =
-        assertThrows(IllegalArgumentException.class, () -> BlockId.getBlockId(0, 0, 2097152));
+        assertThrows(IllegalArgumentException.class, () -> BlockId.getBlockId(0, 2097152, 0));
     assertTrue(
         e2.getMessage()
             .contains("Can't support taskAttemptId[2097152], the max value should be 2097151"));
 
     final Throwable e3 =
-        assertThrows(IllegalArgumentException.class, () -> BlockId.getBlockId(262144, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> BlockId.getBlockId(0, 0, 262144));
     assertTrue(
         e3.getMessage().contains("Can't support sequence[262144], the max value should be 262143"));
   }

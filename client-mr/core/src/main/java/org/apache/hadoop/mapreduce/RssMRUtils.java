@@ -64,7 +64,7 @@ public class RssMRUtils {
       throw new RssException(
           "TaskAttempt " + taskAttemptID + " high bytes " + highBytes + " exceed");
     }
-    return BlockId.getBlockId(highBytes, 0, lowBytes);
+    return BlockId.getBlockId(0, lowBytes, highBytes);
   }
 
   public static TaskAttemptID createMRTaskAttemptId(
@@ -244,13 +244,13 @@ public class RssMRUtils {
             - (attemptId
                 << (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH));
 
-    return BlockId.getBlockId(atomicInt, partitionId, taskId);
+    return BlockId.getBlockId(partitionId, taskId, atomicInt);
   }
 
   public static long getTaskAttemptId(long blockId) {
     int mapId = BlockId.getTaskAttemptId(blockId);
     int attemptId = BlockId.getSequenceNo(blockId) & MAX_ATTEMPT_ID;
-    return BlockId.getBlockId(attemptId, 0, mapId);
+    return BlockId.getBlockId(0, mapId, attemptId);
   }
 
   public static int estimateTaskConcurrency(JobConf jobConf) {

@@ -610,7 +610,7 @@ public class ShuffleServerGrpcTest extends IntegrationTestBase {
           for (int i = 0; i < 100; i++) {
             Map<Integer, List<Long>> ptbs = Maps.newHashMap();
             List<Long> blockIds = Lists.newArrayList();
-            Long blockId = BlockId.getBlockId(i, 1, 0);
+            Long blockId = BlockId.getBlockId(1, 0, i);
             expectedBlockIds.add(blockId);
             blockIds.add(blockId);
             ptbs.put(1, blockIds);
@@ -624,7 +624,7 @@ public class ShuffleServerGrpcTest extends IntegrationTestBase {
           for (int i = 100; i < 200; i++) {
             Map<Integer, List<Long>> ptbs = Maps.newHashMap();
             List<Long> blockIds = Lists.newArrayList();
-            Long blockId = BlockId.getBlockId(i, 1, 1);
+            Long blockId = BlockId.getBlockId(1, 1, i);
             expectedBlockIds.add(blockId);
             blockIds.add(blockId);
             ptbs.put(1, blockIds);
@@ -638,7 +638,7 @@ public class ShuffleServerGrpcTest extends IntegrationTestBase {
           for (int i = 200; i < 300; i++) {
             Map<Integer, List<Long>> ptbs = Maps.newHashMap();
             List<Long> blockIds = Lists.newArrayList();
-            Long blockId = BlockId.getBlockId(i, 1, 2);
+            Long blockId = BlockId.getBlockId(1, 2, i);
             expectedBlockIds.add(blockId);
             blockIds.add(blockId);
             ptbs.put(1, blockIds);
@@ -984,7 +984,7 @@ public class ShuffleServerGrpcTest extends IntegrationTestBase {
   private List<Long> getBlockIdList(int partitionId, int blockNum) {
     List<Long> blockIds = Lists.newArrayList();
     for (int i = 0; i < blockNum; i++) {
-      blockIds.add(BlockId.getBlockId(atomicInteger.getAndIncrement(), partitionId, 0));
+      blockIds.add(BlockId.getBlockId(partitionId, 0, atomicInteger.getAndIncrement()));
     }
     return blockIds;
   }

@@ -51,7 +51,7 @@ public class LocalFileHandlerTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId = BlockId.getBlockId(ATOMIC_INT.incrementAndGet(), 0, 100);
+      long blockId = BlockId.getBlockId(0, 100, ATOMIC_INT.incrementAndGet());
       blocks.add(
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, 100, buf));

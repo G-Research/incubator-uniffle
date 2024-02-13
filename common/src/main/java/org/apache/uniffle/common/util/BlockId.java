@@ -24,34 +24,34 @@ package org.apache.uniffle.common.util;
 // Values of partitionId, taskAttemptId and AtomicInteger are always positive.
 public class BlockId {
   public final long blockId;
-  public final int sequenceNo;
   public final int partitionId;
   public final int taskAttemptId;
+  public final int sequenceNo;
 
   private BlockId(long blockId) {
     this.blockId = blockId;
-    this.sequenceNo = getSequenceNo(blockId);
     this.partitionId = getPartitionId(blockId);
     this.taskAttemptId = getTaskAttemptId(blockId);
+    this.sequenceNo = getSequenceNo(blockId);
   }
 
-  private BlockId(int sequenceNo, int partitionId, int taskAttemptId) {
-    this.blockId = getBlockId(sequenceNo, partitionId, taskAttemptId);
-    this.sequenceNo = sequenceNo;
+  private BlockId(int partitionId, int taskAttemptId, int sequenceNo) {
+    this.blockId = getBlockId(partitionId, taskAttemptId, sequenceNo);
     this.partitionId = partitionId;
     this.taskAttemptId = taskAttemptId;
+    this.sequenceNo = sequenceNo;
   }
 
   @Override
   public String toString() {
     return "blockId["
         + Long.toHexString(blockId)
-        + " (seq: "
-        + Integer.toHexString(sequenceNo)
-        + ", part: "
+        + " (part: "
         + Integer.toHexString(partitionId)
         + ", task: "
         + Integer.toHexString(taskAttemptId)
+        + ", seq: "
+        + Integer.toHexString(sequenceNo)
         + ")]";
   }
 
@@ -63,11 +63,11 @@ public class BlockId {
     return new BlockId(blockId);
   }
 
-  public static BlockId fromIds(int sequenceNo, int partitionId, int taskAttemptId) {
-    return new BlockId(sequenceNo, partitionId, taskAttemptId);
+  public static BlockId fromIds(int partitionId, int taskAttemptId, int sequenceNo) {
+    return new BlockId(partitionId, taskAttemptId, sequenceNo);
   }
 
-  public static long getBlockId(int sequenceNo, int partitionId, long taskAttemptId) {
+  public static long getBlockId(int partitionId, long taskAttemptId, int sequenceNo) {
     if (sequenceNo < 0 || sequenceNo > Constants.MAX_SEQUENCE_NO) {
       throw new IllegalArgumentException(
           "Can't support sequence["
@@ -96,16 +96,16 @@ public class BlockId {
         + taskAttemptId;
   }
 
-  public static int getSequenceNo(long blockId) {
-    return (int)
-        (blockId >> (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH));
-  }
-
   public static int getPartitionId(long blockId) {
     return (int) ((blockId >> Constants.TASK_ATTEMPT_ID_MAX_LENGTH) & Constants.MAX_PARTITION_ID);
   }
 
   public static int getTaskAttemptId(long blockId) {
     return (int) (blockId & Constants.MAX_TASK_ATTEMPT_ID);
+  }
+
+  public static int getSequenceNo(long blockId) {
+    return (int)
+            (blockId >> (Constants.PARTITION_ID_MAX_LENGTH + Constants.TASK_ATTEMPT_ID_MAX_LENGTH));
   }
 }

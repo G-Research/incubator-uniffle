@@ -230,14 +230,14 @@ public class RssUtilsTest {
     Roaring64NavigableMap partition1Bitmap =
         Roaring64NavigableMap.bitmapOf(
             BlockId.getBlockId(0, 0, 0),
-            BlockId.getBlockId(1, 0, 0),
             BlockId.getBlockId(0, 0, 1),
-            BlockId.getBlockId(1, 0, 1));
+            BlockId.getBlockId(0, 1, 0),
+            BlockId.getBlockId(0, 1, 1));
     Roaring64NavigableMap partition2Bitmap =
         Roaring64NavigableMap.bitmapOf(
-            BlockId.getBlockId(0, 1, 0),
+            BlockId.getBlockId(1, 0, 0),
+            BlockId.getBlockId(1, 0, 1),
             BlockId.getBlockId(1, 1, 0),
-            BlockId.getBlockId(0, 1, 1),
             BlockId.getBlockId(1, 1, 1));
     Roaring64NavigableMap shuffleBitmap = Roaring64NavigableMap.bitmapOf();
     shuffleBitmap.or(partition1Bitmap);

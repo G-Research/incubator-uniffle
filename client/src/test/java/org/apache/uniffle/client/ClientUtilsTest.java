@@ -54,7 +54,7 @@ public class ClientUtilsTest {
     for (int i = 0; i < taskSize; i++) {
       except[i] = i;
       for (int j = 0; j < 100; j++) {
-        long blockId = BlockId.getBlockId(j, partitionId, i);
+        long blockId = BlockId.getBlockId(partitionId, i, j);
         blockIdMap.addLong(blockId);
       }
     }

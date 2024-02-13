@@ -92,7 +92,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     readClient.checkProcessedBlockIds();
     readClient.close();
 
-    blockIdBitmap.addLong(BlockId.getBlockId(0, 0, Constants.MAX_TASK_ATTEMPT_ID - 1));
+    blockIdBitmap.addLong(BlockId.getBlockId(0, Constants.MAX_TASK_ATTEMPT_ID - 1, 0));
     taskIdBitmap.addLong(Constants.MAX_TASK_ATTEMPT_ID - 1);
     readClient =
         baseReadBuilder()
@@ -380,7 +380,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     while (iter.hasNext()) {
       BlockId blockId = BlockId.fromLong(iter.next());
       wrongBlockIdBitmap.addLong(
-          BlockId.getBlockId(blockId.sequenceNo, blockId.partitionId + 1, blockId.taskAttemptId));
+          BlockId.getBlockId(blockId.partitionId + 1, blockId.taskAttemptId, blockId.sequenceNo));
     }
 
     ShuffleReadClientImpl readClient =
@@ -588,7 +588,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId = BlockId.getBlockId(ATOMIC_INT.getAndIncrement(), 0, taskAttemptId);
+      long blockId = BlockId.getBlockId(0, taskAttemptId, ATOMIC_INT.getAndIncrement());
       blocks.add(
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf));
@@ -610,7 +610,7 @@ public class ShuffleReadClientImplTest extends HadoopTestBase {
     for (int i = 0; i < num; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      long blockId = BlockId.getBlockId(ATOMIC_INT.getAndIncrement(), 0, taskAttemptId);
+      long blockId = BlockId.getBlockId(0, taskAttemptId, ATOMIC_INT.getAndIncrement());
       ShufflePartitionedBlock spb =
           new ShufflePartitionedBlock(
               length, length, ChecksumUtils.getCrc32(buf), blockId, taskAttemptId, buf);
