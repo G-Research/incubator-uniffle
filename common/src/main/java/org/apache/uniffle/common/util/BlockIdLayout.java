@@ -30,7 +30,8 @@ import org.apache.uniffle.common.config.RssConf;
  * Values of partitionId, taskAttemptId and AtomicInteger are always positive.
  */
 public class BlockIdLayout {
-
+  // historic default values, client-specific config defaults may vary
+  // see RssSparkConfig
   public static final int DEFAULT_SEQUENCE_NO_BITS = 18;
   public static final int DEFAULT_PARTITION_ID_BITS = 24;
   public static final int DEFAULT_TASK_ATTEMPT_ID_BITS = 21;
