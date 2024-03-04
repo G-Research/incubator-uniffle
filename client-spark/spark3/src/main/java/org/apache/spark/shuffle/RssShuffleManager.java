@@ -301,6 +301,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
         LOG.warn("Fail to get conf from {}", client.getDesc());
       }
     }
+
     coordinatorClients.forEach(CoordinatorClient::close);
   }
 
