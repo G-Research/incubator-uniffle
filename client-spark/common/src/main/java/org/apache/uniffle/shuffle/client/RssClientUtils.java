@@ -15,29 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.uniffle.client.request;
+package org.apache.uniffle.shuffle.client;
 
-public class RssGetShuffleResultRequest {
+import java.util.Map;
 
-  private String appId;
-  private int shuffleId;
-  private int partitionId;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
-  public RssGetShuffleResultRequest(String appId, int shuffleId, int partitionId) {
-    this.appId = appId;
-    this.shuffleId = shuffleId;
-    this.partitionId = partitionId;
-  }
+import org.apache.uniffle.common.util.BlockIdLayout;
 
-  public String getAppId() {
-    return appId;
-  }
-
-  public int getShuffleId() {
-    return shuffleId;
-  }
-
-  public int getPartitionId() {
-    return partitionId;
+public class RssClientUtils {
+  public static Roaring64NavigableMap createBlockIdBitmap(
+      int partitionId, Map<Long, Integer> blocks, BlockIdLayout blockIdLayout) {
+    Roaring64NavigableMap bitmap = Roaring64NavigableMap.bitmapOf();
+    blocks.forEach(
+        (taskAttemptId, blockNum) -> {
+          for (int sequenceNo = 0; sequenceNo < blockNum; sequenceNo++) {
+            long blockId = blockIdLayout.getBlockId(sequenceNo, partitionId, taskAttemptId);
+            bitmap.add(blockId);
+          }
+        });
+    return bitmap;
   }
 }

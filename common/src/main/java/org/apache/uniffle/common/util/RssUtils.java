@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -50,6 +51,7 @@ import com.google.common.net.InetAddresses;
 import io.netty.channel.unix.Errors;
 import io.netty.util.internal.PlatformDependent;
 import org.eclipse.jetty.util.MultiException;
+import org.roaringbitmap.RoaringBitmap;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -328,24 +330,18 @@ public class RssUtils {
     return hostName.replaceAll("[\\.-]", "_");
   }
 
-  public static Map<Integer, Roaring64NavigableMap> generatePartitionToBitmap(
-      Roaring64NavigableMap shuffleBitmap,
-      int startPartition,
-      int endPartition,
-      BlockIdLayout layout) {
-    Map<Integer, Roaring64NavigableMap> result = Maps.newHashMap();
-    for (int partitionId = startPartition; partitionId < endPartition; partitionId++) {
-      result.computeIfAbsent(partitionId, key -> Roaring64NavigableMap.bitmapOf());
-    }
-    Iterator<Long> it = shuffleBitmap.iterator();
-    while (it.hasNext()) {
-      Long blockId = it.next();
-      int partitionId = layout.getPartitionId(blockId);
-      if (partitionId >= startPartition && partitionId < endPartition) {
-        result.get(partitionId).add(blockId);
-      }
-    }
-    return result;
+  public static Map<Integer, Map<Long, Integer>> generatePartitionToBlocks(
+      Map<Long, Map<Integer, Integer>> blocks) {
+    Map<Integer, Map<Long, Integer>> partitionToBlocks = Maps.newHashMap();
+    blocks.forEach(
+        (taskAttemptId, taskAttemptBlocks) ->
+            taskAttemptBlocks.forEach(
+                (partitionId, blockNum) ->
+                    partitionToBlocks
+                        .computeIfAbsent(partitionId, key -> Maps.newHashMap())
+                        .put(taskAttemptId, blockNum)));
+
+    return partitionToBlocks;
   }
 
   public static Map<ShuffleServerInfo, Set<Integer>> generateServerToPartitions(
@@ -362,6 +358,18 @@ public class RssUtils {
       }
     }
     return serverToPartitions;
+  }
+
+  public static Map<Long, RoaringBitmap> getExpectedBlocks(Map<Long, Integer> blocks) {
+    return blocks.entrySet().stream()
+        .collect(
+            Collectors.toMap(
+                Map.Entry::getKey,
+                e -> {
+                  RoaringBitmap bm = new RoaringBitmap();
+                  bm.flip(0L, e.getValue());
+                  return bm;
+                }));
   }
 
   public static void checkProcessedBlockIds(

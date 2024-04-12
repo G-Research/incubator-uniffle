@@ -17,7 +17,6 @@
 
 package org.apache.uniffle.client.request;
 
-import java.util.List;
 import java.util.Map;
 
 public class RssReportShuffleResultRequest {
@@ -25,20 +24,14 @@ public class RssReportShuffleResultRequest {
   private String appId;
   private int shuffleId;
   private long taskAttemptId;
-  private int bitmapNum;
-  private Map<Integer, List<Long>> partitionToBlockIds;
+  private Map<Integer, Integer> partitionToBlocks;
 
   public RssReportShuffleResultRequest(
-      String appId,
-      int shuffleId,
-      long taskAttemptId,
-      Map<Integer, List<Long>> partitionToBlockIds,
-      int bitmapNum) {
+      String appId, int shuffleId, long taskAttemptId, Map<Integer, Integer> partitionToBlocks) {
     this.appId = appId;
     this.shuffleId = shuffleId;
     this.taskAttemptId = taskAttemptId;
-    this.bitmapNum = bitmapNum;
-    this.partitionToBlockIds = partitionToBlockIds;
+    this.partitionToBlocks = partitionToBlocks;
   }
 
   public String getAppId() {
@@ -53,11 +46,7 @@ public class RssReportShuffleResultRequest {
     return taskAttemptId;
   }
 
-  public int getBitmapNum() {
-    return bitmapNum;
-  }
-
-  public Map<Integer, List<Long>> getPartitionToBlockIds() {
-    return partitionToBlockIds;
+  public Map<Integer, Integer> getPartitionToBlocks() {
+    return partitionToBlocks;
   }
 }

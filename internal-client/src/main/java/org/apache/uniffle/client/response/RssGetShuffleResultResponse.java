@@ -17,24 +17,20 @@
 
 package org.apache.uniffle.client.response;
 
-import java.io.IOException;
-
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
+import java.util.Map;
 
 import org.apache.uniffle.common.rpc.StatusCode;
-import org.apache.uniffle.common.util.RssUtils;
 
 public class RssGetShuffleResultResponse extends ClientResponse {
 
-  private Roaring64NavigableMap blockIdBitmap;
+  private Map<Long, Integer> blocks;
 
-  public RssGetShuffleResultResponse(StatusCode statusCode, byte[] serializedBitmap)
-      throws IOException {
+  public RssGetShuffleResultResponse(StatusCode statusCode, Map<Long, Integer> blocks) {
     super(statusCode);
-    blockIdBitmap = RssUtils.deserializeBitMap(serializedBitmap);
+    this.blocks = blocks;
   }
 
-  public Roaring64NavigableMap getBlockIdBitmap() {
-    return blockIdBitmap;
+  public Map<Long, Integer> getBlocks() {
+    return blocks;
   }
 }

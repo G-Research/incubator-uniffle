@@ -671,7 +671,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
     Map<ShuffleServerInfo, Set<Integer>> serverToPartitions =
         getPartitionDataServers(shuffleHandleInfo, startPartition, endPartition);
     long start = System.currentTimeMillis();
-    Roaring64NavigableMap blockIdBitmap =
+    Map<Long, Map<Integer, Integer>> blocks =
         getShuffleResultForMultiPart(
             clientType,
             serverToPartitions,
@@ -683,7 +683,9 @@ public class RssShuffleManager extends RssShuffleManagerBase {
         "Get shuffle blockId cost "
             + (System.currentTimeMillis() - start)
             + " ms, and get "
-            + blockIdBitmap.getLongCardinality()
+            + blocks.values().stream()
+                .mapToInt(m -> m.values().stream().mapToInt(i -> i).sum())
+                .sum()
             + " blockIds for shuffleId["
             + shuffleId
             + "], startPartition["
@@ -715,8 +717,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
         shuffleRemoteStoragePath,
         readerHadoopConf,
         partitionNum,
-        RssUtils.generatePartitionToBitmap(
-            blockIdBitmap, startPartition, endPartition, blockIdLayout),
+        RssUtils.generatePartitionToBlocks(blocks),
         taskIdBitmap,
         readMetrics,
         RssSparkConfig.toRssConf(sparkConf),
@@ -1078,7 +1079,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
     return !failedTaskIds.contains(taskId);
   }
 
-  private Roaring64NavigableMap getShuffleResultForMultiPart(
+  private Map<Long, Map<Integer, Integer>> getShuffleResultForMultiPart(
       String clientType,
       Map<ShuffleServerInfo, Set<Integer>> serverToPartitions,
       String appId,

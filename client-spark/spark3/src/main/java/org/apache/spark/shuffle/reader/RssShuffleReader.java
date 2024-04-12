@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.reader;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -54,6 +55,8 @@ import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
+import org.apache.uniffle.common.util.BlockIdLayout;
+import org.apache.uniffle.shuffle.client.RssClientUtils;
 
 import static org.apache.uniffle.common.util.Constants.DRIVER_HOST;
 
@@ -72,13 +75,14 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
   private String taskId;
   private String basePath;
   private int partitionNum;
-  private Map<Integer, Roaring64NavigableMap> partitionToExpectBlocks;
+  private Map<Integer, Map<Long, Integer>> partitionToExpectBlocks;
   private Roaring64NavigableMap taskIdBitmap;
   private Configuration hadoopConf;
   private int mapStartIndex;
   private int mapEndIndex;
   private ShuffleReadMetrics readMetrics;
   private RssConf rssConf;
+  private BlockIdLayout blockIdLayout;
   private ShuffleDataDistributionType dataDistributionType;
 
   public RssShuffleReader(
@@ -91,7 +95,7 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
       String basePath,
       Configuration hadoopConf,
       int partitionNum,
-      Map<Integer, Roaring64NavigableMap> partitionToExpectBlocks,
+      Map<Integer, Map<Long, Integer>> partitionToExpectBlocks,
       Roaring64NavigableMap taskIdBitmap,
       ShuffleReadMetrics readMetrics,
       RssConf rssConf,
@@ -116,6 +120,7 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
     this.readMetrics = readMetrics;
     this.partitionToShuffleServers = allPartitionToServers;
     this.rssConf = rssConf;
+    this.blockIdLayout = BlockIdLayout.from(rssConf);
     this.dataDistributionType = dataDistributionType;
   }
 
@@ -236,7 +241,7 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
         return;
       }
       for (int partition = startPartition; partition < endPartition; partition++) {
-        if (partitionToExpectBlocks.get(partition).isEmpty()) {
+        if (partitionToExpectBlocks.getOrDefault(partition, Collections.emptyMap()).isEmpty()) {
           LOG.info("{} partition is empty partition", partition);
           continue;
         }
@@ -264,7 +269,9 @@ public class RssShuffleReader<K, C> implements ShuffleReader<K, C> {
                         .basePath(basePath)
                         .partitionNumPerRange(1)
                         .partitionNum(partitionNum)
-                        .blockIdBitmap(partitionToExpectBlocks.get(partition))
+                        .blockIdBitmap(
+                            RssClientUtils.createBlockIdBitmap(
+                                partition, partitionToExpectBlocks.get(partition), blockIdLayout))
                         .taskIdBitmap(taskIdBitmap)
                         .shuffleServerInfoList(shuffleServerInfoList)
                         .hadoopConf(hadoopConf)

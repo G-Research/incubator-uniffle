@@ -125,13 +125,7 @@ message ReportShuffleResultRequest {
   string appId = 1;
   int32 shuffleId = 2;
   int64 taskAttemptId = 3;
-  int32 bitmapNum = 4;
-  repeated PartitionToBlockIds partitionToBlockIds = 5;
-}
-
-message PartitionToBlockIds {
-  int32 partitionId = 1;
-  repeated int64 blockIds = 2;
+  map<int32, int32> partitionToBlocks = 4;
 }
 
 message ReportShuffleResultResponse {
@@ -143,32 +137,29 @@ message GetShuffleResultRequest {
   string appId = 1;
   int32 shuffleId = 2;
   int32 partitionId = 3;
-  BlockIdLayout blockIdLayout = 4;
-}
-
-message BlockIdLayout {
-  int32 sequenceNoBits = 1;
-  int32 partitionIdBits = 2;
-  int32 taskAttemptIdBits = 3;
 }
 
 message GetShuffleResultResponse {
   StatusCode status = 1;
   string retMsg = 2;
-  bytes serializedBitmap = 3;
+  map<int64, int32> taskAttemptBlocks = 3;
 }
 
 message GetShuffleResultForMultiPartRequest {
   string appId = 1;
   int32 shuffleId = 2;
   repeated int32 partitions = 3;
-  BlockIdLayout blockIdLayout = 4;
 }
 
 message GetShuffleResultForMultiPartResponse {
   StatusCode status = 1;
   string retMsg = 2;
-  bytes serializedBitmap = 3;
+  repeated TaskAttemptPartitionBlock taskAttemptBlocks = 3;
+}
+
+message TaskAttemptPartitionBlock {
+  int64 taskAttemptId = 1;
+  map<int32, int32> partitionBlocks = 2;
 }
 
 message ShufflePartitionRange {

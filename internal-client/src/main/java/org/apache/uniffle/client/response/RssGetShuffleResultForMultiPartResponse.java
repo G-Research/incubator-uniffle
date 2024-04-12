@@ -15,29 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.uniffle.client.request;
+package org.apache.uniffle.client.response;
 
-public class RssGetShuffleResultRequest {
+import java.util.Map;
 
-  private String appId;
-  private int shuffleId;
-  private int partitionId;
+import org.apache.uniffle.common.rpc.StatusCode;
 
-  public RssGetShuffleResultRequest(String appId, int shuffleId, int partitionId) {
-    this.appId = appId;
-    this.shuffleId = shuffleId;
-    this.partitionId = partitionId;
+public class RssGetShuffleResultForMultiPartResponse extends ClientResponse {
+
+  private Map<Long, Map<Integer, Integer>> blocks;
+
+  public RssGetShuffleResultForMultiPartResponse(
+      StatusCode statusCode, Map<Long, Map<Integer, Integer>> blocks) {
+    super(statusCode);
+    this.blocks = blocks;
   }
 
-  public String getAppId() {
-    return appId;
-  }
-
-  public int getShuffleId() {
-    return shuffleId;
-  }
-
-  public int getPartitionId() {
-    return partitionId;
+  public Map<Long, Map<Integer, Integer>> getBlocks() {
+    return blocks;
   }
 }
