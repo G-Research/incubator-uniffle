@@ -386,11 +386,11 @@ public class RssUtils {
   }
 
   public static Roaring64NavigableMap generateTaskIdBitMap(
-      Roaring64NavigableMap blockIdBitmap, IdHelper idHelper) {
+      Roaring64NavigableMap blockIdBitmap, BlockIdLayout layout) {
     Iterator<Long> iterator = blockIdBitmap.iterator();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf();
     while (iterator.hasNext()) {
-      taskIdBitmap.addLong(idHelper.getTaskAttemptId(iterator.next()));
+      taskIdBitmap.addLong(layout.getTaskAttemptId(iterator.next()));
     }
     return taskIdBitmap;
   }

@@ -20,6 +20,7 @@ package org.apache.uniffle.storage.request;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.uniffle.common.util.BlockIdLayout;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.ClientType;
@@ -27,7 +28,6 @@ import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssBaseConf;
 import org.apache.uniffle.common.config.RssConf;
-import org.apache.uniffle.common.util.IdHelper;
 
 public class CreateShuffleReadHandlerRequest {
 
@@ -52,8 +52,7 @@ public class CreateShuffleReadHandlerRequest {
   private boolean expectedTaskIdsBitmapFilterEnable;
   private boolean offHeapEnabled;
   private RssConf clientConf;
-
-  private IdHelper idHelper;
+  private BlockIdLayout blockIdLayout;
 
   private ClientType clientType;
 
@@ -211,12 +210,12 @@ public class CreateShuffleReadHandlerRequest {
     this.expectedTaskIdsBitmapFilterEnable = true;
   }
 
-  public IdHelper getIdHelper() {
-    return idHelper;
+  public BlockIdLayout getBlockIdLayout() {
+    return blockIdLayout;
   }
 
-  public void setIdHelper(IdHelper idHelper) {
-    this.idHelper = idHelper;
+  public void setBlockIdLayout(BlockIdLayout blockIdLayout) {
+    this.blockIdLayout = blockIdLayout;
   }
 
   public void enableOffHeap() {

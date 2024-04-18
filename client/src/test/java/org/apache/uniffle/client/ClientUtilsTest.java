@@ -32,7 +32,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.uniffle.client.util.ClientUtils;
-import org.apache.uniffle.client.util.DefaultIdHelper;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.RssUtils;
 
@@ -59,8 +58,7 @@ public class ClientUtilsTest {
         blockIdMap.addLong(blockId);
       }
     }
-    Roaring64NavigableMap taskIdBitMap =
-        RssUtils.generateTaskIdBitMap(blockIdMap, new DefaultIdHelper(layout));
+    Roaring64NavigableMap taskIdBitMap = RssUtils.generateTaskIdBitMap(blockIdMap, layout);
     assertEquals(taskSize, taskIdBitMap.getLongCardinality());
     LongIterator longIterator = taskIdBitMap.getLongIterator();
     for (int i = 0; i < taskSize; i++) {
