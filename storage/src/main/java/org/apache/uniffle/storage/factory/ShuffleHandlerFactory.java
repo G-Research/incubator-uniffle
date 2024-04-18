@@ -125,7 +125,7 @@ public class ShuffleHandlerFactory {
     if (request.isExpectedTaskIdsBitmapFilterEnable()) {
       Roaring64NavigableMap realExceptBlockIds = RssUtils.cloneBitMap(request.getExpectBlockIds());
       realExceptBlockIds.xor(request.getProcessBlockIds());
-      expectTaskIds = RssUtils.generateTaskIdBitMap(realExceptBlockIds, request.getIdHelper());
+      expectTaskIds = RssUtils.generateTaskIdBitMap(realExceptBlockIds, request.getBlockIdLayout());
     }
     ClientReadHandler memoryClientReadHandler =
         new MemoryClientReadHandler(

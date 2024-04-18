@@ -20,6 +20,7 @@ package org.apache.uniffle.client.factory;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.uniffle.common.util.BlockIdLayout;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.api.ShuffleReadClient;
@@ -30,7 +31,6 @@ import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssConf;
-import org.apache.uniffle.common.util.IdHelper;
 
 public class ShuffleClientFactory {
 
@@ -203,7 +203,7 @@ public class ShuffleClientFactory {
     private Roaring64NavigableMap taskIdBitmap;
     private List<ShuffleServerInfo> shuffleServerInfoList;
     private Configuration hadoopConf;
-    private IdHelper idHelper;
+    private BlockIdLayout blockIdLayout;
     private ShuffleDataDistributionType shuffleDataDistributionType;
     private boolean expectedTaskIdsBitmapFilterEnable;
     private RssConf rssConf;
@@ -265,8 +265,8 @@ public class ShuffleClientFactory {
       return this;
     }
 
-    public ReadClientBuilder idHelper(IdHelper idHelper) {
-      this.idHelper = idHelper;
+    public ReadClientBuilder blockIdLayout(BlockIdLayout blockIdLayout) {
+      this.blockIdLayout = blockIdLayout;
       return this;
     }
 
@@ -364,8 +364,8 @@ public class ShuffleClientFactory {
       return hadoopConf;
     }
 
-    public IdHelper getIdHelper() {
-      return idHelper;
+    public BlockIdLayout getBlockIdLayout() {
+      return blockIdLayout;
     }
 
     public ShuffleDataDistributionType getShuffleDataDistributionType() {
