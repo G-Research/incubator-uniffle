@@ -175,6 +175,7 @@ public class RssShuffleWriterTest {
         new WriteBufferManager(
             0,
             0,
+            0,
             bufferOptions,
             kryoSerializer,
             partitionToServers,
@@ -189,6 +190,7 @@ public class RssShuffleWriterTest {
     RssShuffleWriter<String, String, String> rssShuffleWriter =
         new RssShuffleWriter<>(
             "appId",
+            0,
             0,
             "taskId",
             1L,
