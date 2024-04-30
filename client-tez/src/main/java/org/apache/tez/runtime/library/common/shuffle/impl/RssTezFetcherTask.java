@@ -29,7 +29,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.tez.common.CallableWithNdc;
 import org.apache.tez.common.RssTezConfig;
 import org.apache.tez.common.RssTezUtils;
-import org.apache.tez.common.TezIdHelper;
 import org.apache.tez.runtime.api.InputContext;
 import org.apache.tez.runtime.library.common.InputAttemptIdentifier;
 import org.apache.tez.runtime.library.common.shuffle.FetchResult;
@@ -193,7 +192,6 @@ public class RssTezFetcherTask extends CallableWithNdc<FetchResult> {
                       .taskIdBitmap(taskIdBitmap)
                       .shuffleServerInfoList(new ArrayList<>(serverInfoSet))
                       .hadoopConf(hadoopConf)
-                      .idHelper(new TezIdHelper())
                       .expectedTaskIdsBitmapFilterEnable(expectedTaskIdsBitmapFilterEnable)
                       .rssConf(RssTezConfig.toRssConf(this.conf)));
       RssTezFetcher fetcher =

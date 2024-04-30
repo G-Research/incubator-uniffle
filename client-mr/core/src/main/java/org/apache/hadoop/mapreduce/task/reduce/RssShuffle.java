@@ -31,7 +31,6 @@ import org.apache.hadoop.mapred.ShuffleConsumerPlugin;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TaskStatus;
 import org.apache.hadoop.mapred.TaskUmbilicalProtocol;
-import org.apache.hadoop.mapreduce.MRIdHelper;
 import org.apache.hadoop.mapreduce.RssMRConfig;
 import org.apache.hadoop.mapreduce.RssMRUtils;
 import org.apache.hadoop.util.Progress;
@@ -237,7 +236,6 @@ public class RssShuffle<K, V> implements ShuffleConsumerPlugin<K, V>, ExceptionR
                       .taskIdBitmap(taskIdBitmap)
                       .shuffleServerInfoList(serverInfoList)
                       .hadoopConf(readerJobConf)
-                      .idHelper(new MRIdHelper())
                       .expectedTaskIdsBitmapFilterEnable(expectedTaskIdsBitmapFilterEnable)
                       .retryMax(retryMax)
                       .retryIntervalMax(retryIntervalMax)
