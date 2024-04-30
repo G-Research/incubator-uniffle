@@ -66,7 +66,6 @@ import org.apache.tez.common.CallableWithNdc;
 import org.apache.tez.common.InputContextUtils;
 import org.apache.tez.common.RssTezConfig;
 import org.apache.tez.common.RssTezUtils;
-import org.apache.tez.common.TezIdHelper;
 import org.apache.tez.common.TezUtilsInternal;
 import org.apache.tez.common.UmbilicalUtils;
 import org.apache.tez.common.counters.TaskCounter;
@@ -1864,7 +1863,6 @@ class RssShuffleScheduler extends ShuffleScheduler {
                       .taskIdBitmap(taskIdBitmap)
                       .shuffleServerInfoList(shuffleServerInfoList)
                       .hadoopConf(hadoopConf)
-                      .idHelper(new TezIdHelper())
                       .expectedTaskIdsBitmapFilterEnable(expectedTaskIdsBitmapFilterEnable)
                       .rssConf(RssTezConfig.toRssConf(conf)));
       RssTezShuffleDataFetcher fetcher =

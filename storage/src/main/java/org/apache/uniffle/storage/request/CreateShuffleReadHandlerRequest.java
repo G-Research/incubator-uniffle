@@ -27,7 +27,6 @@ import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssBaseConf;
 import org.apache.uniffle.common.config.RssConf;
-import org.apache.uniffle.common.util.IdHelper;
 
 public class CreateShuffleReadHandlerRequest {
 
@@ -52,8 +51,6 @@ public class CreateShuffleReadHandlerRequest {
   private boolean expectedTaskIdsBitmapFilterEnable;
   private boolean offHeapEnabled;
   private RssConf clientConf;
-
-  private IdHelper idHelper;
 
   private ClientType clientType;
 
@@ -209,14 +206,6 @@ public class CreateShuffleReadHandlerRequest {
 
   public void useExpectedTaskIdsBitmapFilter() {
     this.expectedTaskIdsBitmapFilterEnable = true;
-  }
-
-  public IdHelper getIdHelper() {
-    return idHelper;
-  }
-
-  public void setIdHelper(IdHelper idHelper) {
-    this.idHelper = idHelper;
   }
 
   public void enableOffHeap() {

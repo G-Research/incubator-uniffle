@@ -30,7 +30,6 @@ import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssConf;
-import org.apache.uniffle.common.util.IdHelper;
 
 public class ShuffleClientFactory {
 
@@ -203,7 +202,6 @@ public class ShuffleClientFactory {
     private Roaring64NavigableMap taskIdBitmap;
     private List<ShuffleServerInfo> shuffleServerInfoList;
     private Configuration hadoopConf;
-    private IdHelper idHelper;
     private ShuffleDataDistributionType shuffleDataDistributionType;
     private boolean expectedTaskIdsBitmapFilterEnable;
     private RssConf rssConf;
@@ -262,11 +260,6 @@ public class ShuffleClientFactory {
 
     public ReadClientBuilder hadoopConf(Configuration hadoopConf) {
       this.hadoopConf = hadoopConf;
-      return this;
-    }
-
-    public ReadClientBuilder idHelper(IdHelper idHelper) {
-      this.idHelper = idHelper;
       return this;
     }
 
@@ -362,10 +355,6 @@ public class ShuffleClientFactory {
 
     public Configuration getHadoopConf() {
       return hadoopConf;
-    }
-
-    public IdHelper getIdHelper() {
-      return idHelper;
     }
 
     public ShuffleDataDistributionType getShuffleDataDistributionType() {

@@ -46,7 +46,6 @@ import org.apache.uniffle.client.request.RssRegisterShuffleRequest;
 import org.apache.uniffle.client.request.RssSendCommitRequest;
 import org.apache.uniffle.client.request.RssSendShuffleDataRequest;
 import org.apache.uniffle.client.response.RssSendShuffleDataResponse;
-import org.apache.uniffle.client.util.DefaultIdHelper;
 import org.apache.uniffle.common.BufferSegment;
 import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.PartitionRange;
@@ -314,11 +313,7 @@ public class ShuffleServerWithLocalOfLocalOrderTest extends ShuffleReadWriteBase
         expectedData.entrySet().stream()
             .filter(x -> expectedBlockIds4.contains(x.getKey()))
             .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
-    taskIds = Roaring64NavigableMap.bitmapOf();
-    BlockIdLayout layout = BlockIdLayout.DEFAULT;
-    for (long blockId : expectedBlockIds4) {
-      taskIds.add(new DefaultIdHelper(layout).getTaskAttemptId(blockId));
-    }
+    taskIds = Roaring64NavigableMap.bitmapOf(0, 1, 2);
     sdr =
         readShuffleData(
             shuffleServerClient,
