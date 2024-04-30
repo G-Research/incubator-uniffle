@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
@@ -54,6 +55,7 @@ import org.apache.uniffle.client.response.RssFinishShuffleResponse;
 import org.apache.uniffle.client.response.RssGetInMemoryShuffleDataResponse;
 import org.apache.uniffle.client.response.RssGetShuffleDataResponse;
 import org.apache.uniffle.client.response.RssGetShuffleIndexResponse;
+import org.apache.uniffle.client.response.RssGetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.client.response.RssGetShuffleResultResponse;
 import org.apache.uniffle.client.response.RssRegisterShuffleResponse;
 import org.apache.uniffle.client.response.RssReportShuffleResultResponse;
@@ -90,7 +92,6 @@ import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultResponse;
-import org.apache.uniffle.proto.RssProtos.PartitionToBlockIds;
 import org.apache.uniffle.proto.RssProtos.RemoteStorage;
 import org.apache.uniffle.proto.RssProtos.RemoteStorageConfItem;
 import org.apache.uniffle.proto.RssProtos.ReportShuffleResultRequest;
@@ -107,6 +108,7 @@ import org.apache.uniffle.proto.RssProtos.ShuffleDataBlockSegment;
 import org.apache.uniffle.proto.RssProtos.ShufflePartitionRange;
 import org.apache.uniffle.proto.RssProtos.ShuffleRegisterRequest;
 import org.apache.uniffle.proto.RssProtos.ShuffleRegisterResponse;
+import org.apache.uniffle.proto.RssProtos.TaskAttemptPartitionBlock;
 import org.apache.uniffle.proto.ShuffleServerGrpc;
 import org.apache.uniffle.proto.ShuffleServerGrpc.ShuffleServerBlockingStub;
 
@@ -655,25 +657,12 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
 
   @Override
   public RssReportShuffleResultResponse reportShuffleResult(RssReportShuffleResultRequest request) {
-    List<PartitionToBlockIds> partitionToBlockIds = Lists.newArrayList();
-    for (Map.Entry<Integer, List<Long>> entry : request.getPartitionToBlockIds().entrySet()) {
-      List<Long> blockIds = entry.getValue();
-      if (blockIds != null && !blockIds.isEmpty()) {
-        partitionToBlockIds.add(
-            PartitionToBlockIds.newBuilder()
-                .setPartitionId(entry.getKey())
-                .addAllBlockIds(entry.getValue())
-                .build());
-      }
-    }
-
     ReportShuffleResultRequest recRequest =
         ReportShuffleResultRequest.newBuilder()
             .setAppId(request.getAppId())
             .setShuffleId(request.getShuffleId())
             .setTaskAttemptId(request.getTaskAttemptId())
-            .setBitmapNum(request.getBitmapNum())
-            .addAllPartitionToBlockIds(partitionToBlockIds)
+            .putAllPartitionToBlocks(request.getPartitionToBlocks())
             .build();
     ReportShuffleResultResponse rpcResponse = doReportShuffleResult(recRequest);
 
@@ -732,12 +721,6 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
             .setAppId(request.getAppId())
             .setShuffleId(request.getShuffleId())
             .setPartitionId(request.getPartitionId())
-            .setBlockIdLayout(
-                RssProtos.BlockIdLayout.newBuilder()
-                    .setSequenceNoBits(request.getBlockIdLayout().sequenceNoBits)
-                    .setPartitionIdBits(request.getBlockIdLayout().partitionIdBits)
-                    .setTaskAttemptIdBits(request.getBlockIdLayout().taskAttemptIdBits)
-                    .build())
             .build();
     GetShuffleResultResponse rpcResponse = getBlockingStub().getShuffleResult(rpcRequest);
     RssProtos.StatusCode statusCode = rpcResponse.getStatus();
@@ -748,7 +731,7 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
         try {
           response =
               new RssGetShuffleResultResponse(
-                  StatusCode.SUCCESS, rpcResponse.getSerializedBitmap().toByteArray());
+                  StatusCode.SUCCESS, rpcResponse.getTaskAttemptBlocksMap());
         } catch (Exception e) {
           throw new RssException(e);
         }
@@ -773,31 +756,29 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
   }
 
   @Override
-  public RssGetShuffleResultResponse getShuffleResultForMultiPart(
+  public RssGetShuffleResultForMultiPartResponse getShuffleResultForMultiPart(
       RssGetShuffleResultForMultiPartRequest request) {
     GetShuffleResultForMultiPartRequest rpcRequest =
         GetShuffleResultForMultiPartRequest.newBuilder()
             .setAppId(request.getAppId())
             .setShuffleId(request.getShuffleId())
             .addAllPartitions(request.getPartitions())
-            .setBlockIdLayout(
-                RssProtos.BlockIdLayout.newBuilder()
-                    .setSequenceNoBits(request.getBlockIdLayout().sequenceNoBits)
-                    .setPartitionIdBits(request.getBlockIdLayout().partitionIdBits)
-                    .setTaskAttemptIdBits(request.getBlockIdLayout().taskAttemptIdBits)
-                    .build())
             .build();
     GetShuffleResultForMultiPartResponse rpcResponse =
         getBlockingStub().getShuffleResultForMultiPart(rpcRequest);
     RssProtos.StatusCode statusCode = rpcResponse.getStatus();
 
-    RssGetShuffleResultResponse response;
+    RssGetShuffleResultForMultiPartResponse response;
     switch (statusCode) {
       case SUCCESS:
         try {
-          response =
-              new RssGetShuffleResultResponse(
-                  StatusCode.SUCCESS, rpcResponse.getSerializedBitmap().toByteArray());
+          Map<Long, Map<Integer, Integer>> blocks =
+              rpcResponse.getTaskAttemptBlocksList().stream()
+                  .collect(
+                      Collectors.toMap(
+                          TaskAttemptPartitionBlock::getTaskAttemptId,
+                          TaskAttemptPartitionBlock::getPartitionBlocksMap));
+          response = new RssGetShuffleResultForMultiPartResponse(StatusCode.SUCCESS, blocks);
         } catch (Exception e) {
           throw new RssException(e);
         }

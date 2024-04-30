@@ -19,20 +19,16 @@ package org.apache.uniffle.client.request;
 
 import java.util.Set;
 
-import org.apache.uniffle.common.util.BlockIdLayout;
-
 public class RssGetShuffleResultForMultiPartRequest {
   private String appId;
   private int shuffleId;
   private Set<Integer> partitions;
-  private BlockIdLayout blockIdLayout;
 
   public RssGetShuffleResultForMultiPartRequest(
-      String appId, int shuffleId, Set<Integer> partitions, BlockIdLayout blockIdLayout) {
+      String appId, int shuffleId, Set<Integer> partitions) {
     this.appId = appId;
     this.shuffleId = shuffleId;
     this.partitions = partitions;
-    this.blockIdLayout = blockIdLayout;
   }
 
   public String getAppId() {
@@ -45,9 +41,5 @@ public class RssGetShuffleResultForMultiPartRequest {
 
   public Set<Integer> getPartitions() {
     return partitions;
-  }
-
-  public BlockIdLayout getBlockIdLayout() {
-    return blockIdLayout;
   }
 }

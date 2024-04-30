@@ -64,8 +64,8 @@ public abstract class SparkIntegrationTestBase extends IntegrationTestBase {
     start = System.currentTimeMillis();
     Map resultWithRssNetty = runSparkApp(sparkConf, fileName);
     final long durationWithRssNetty = System.currentTimeMillis() - start;
-    verifyTestResult(resultWithoutRss, resultWithRss);
-    verifyTestResult(resultWithoutRss, resultWithRssNetty);
+    assertEquals(resultWithoutRss, resultWithRss);
+    assertEquals(resultWithoutRss, resultWithRssNetty);
 
     LOG.info(
         "Test: durationWithoutRss["
@@ -122,12 +122,5 @@ public abstract class SparkIntegrationTestBase extends IntegrationTestBase {
 
   public void updateSparkConfWithRssNetty(SparkConf sparkConf) {
     sparkConf.set(RssSparkConfig.RSS_CLIENT_TYPE, "GRPC_NETTY");
-  }
-
-  protected void verifyTestResult(Map expected, Map actual) {
-    assertEquals(expected.size(), actual.size());
-    for (Object expectedKey : expected.keySet()) {
-      assertEquals(expected.get(expectedKey), actual.get(expectedKey));
-    }
   }
 }

@@ -358,6 +358,10 @@ public class WriteBufferManager extends MemoryConsumer {
     return seqNo;
   }
 
+  public Map<Integer, Integer> getPartitionBlockNums() {
+    return partitionToSeqNo;
+  }
+
   private void requestMemory(long requiredMem) {
     final long start = System.currentTimeMillis();
     if (allocatedBytes.get() - usedBytes.get() < requiredMem) {

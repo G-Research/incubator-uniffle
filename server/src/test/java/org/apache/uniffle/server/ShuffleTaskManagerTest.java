@@ -49,14 +49,12 @@ import org.apache.uniffle.common.RemoteStorageInfo;
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.ShufflePartitionedBlock;
 import org.apache.uniffle.common.ShufflePartitionedData;
-import org.apache.uniffle.common.exception.InvalidRequestException;
 import org.apache.uniffle.common.exception.NoBufferForHugePartitionException;
 import org.apache.uniffle.common.exception.NoRegisterException;
 import org.apache.uniffle.common.exception.RssException;
 import org.apache.uniffle.common.rpc.StatusCode;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.ChecksumUtils;
-import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.server.buffer.PreAllocatedBufferInfo;
 import org.apache.uniffle.server.buffer.ShuffleBuffer;
 import org.apache.uniffle.server.buffer.ShuffleBufferManager;
@@ -808,7 +806,6 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
     String storageBasePath = HDFS_URI + "rss/test";
     String appId = "test_app";
     final int shuffleId = 1;
-    final int bitNum = 3;
     final int partitionNum = 10;
     final int taskNum = 10;
     final int blocksPerTask = 2;
@@ -836,8 +833,8 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
     int startPartition = 6;
     int endPartition = 9;
     BlockIdLayout layout = BlockIdLayout.DEFAULT;
-    Roaring64NavigableMap expectedBlockIds = Roaring64NavigableMap.bitmapOf();
-    Map<Integer, long[]> blockIdsToReport = Maps.newHashMap();
+    Map<Integer, Integer> blocksToReport = Maps.newHashMap();
+    Map<Long, Map<Integer, Integer>> expectedBlocks = Maps.newHashMap();
 
     for (int partitionId = 0; partitionId < partitionNum; partitionId++) {
       shuffleTaskManager.registerShuffle(
@@ -853,32 +850,31 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
           blockIds[taskId * blocksPerTask + i] = blockId;
         }
       }
-      blockIdsToReport.putIfAbsent(partitionId, blockIds);
+      blocksToReport.putIfAbsent(partitionId, blocksPerTask);
       if (partitionId >= startPartition) {
-        expectedBlockIds.add(blockIds);
+        for (long taskId = 0; taskId < taskNum; taskId++) {
+          expectedBlocks
+              .computeIfAbsent(taskId, t -> Maps.newHashMap())
+              .put(partitionId, blocksPerTask);
+        }
       }
     }
     assertEquals(
         (endPartition - startPartition + 1) * taskNum * blocksPerTask,
-        expectedBlockIds.getLongCardinality());
+        expectedBlocks.values().stream()
+            .mapToInt(p -> p.values().stream().mapToInt(i -> i).sum())
+            .sum());
 
-    shuffleTaskManager.addFinishedBlockIds(appId, shuffleId, blockIdsToReport, bitNum);
+    for (long taskId = 0; taskId < taskNum; taskId++) {
+      shuffleTaskManager.addFinishedBlocks(appId, shuffleId, taskId, blocksToReport);
+    }
     Set<Integer> requestPartitions = Sets.newHashSet();
     for (int partitionId = startPartition; partitionId <= endPartition; partitionId++) {
       requestPartitions.add(partitionId);
     }
-    byte[] serializeBitMap =
-        shuffleTaskManager.getFinishedBlockIds(appId, shuffleId, requestPartitions, layout);
-    Roaring64NavigableMap resBlockIds = RssUtils.deserializeBitMap(serializeBitMap);
-    assertEquals(expectedBlockIds, resBlockIds);
-
-    try {
-      // calling with same appId and shuffleId but different bitmapNum should fail
-      shuffleTaskManager.addFinishedBlockIds(appId, shuffleId, blockIdsToReport, bitNum - 1);
-      fail("Exception should be thrown");
-    } catch (InvalidRequestException e) {
-      assertEquals(e.getMessage(), "Request expects 2 bitmaps, but there are 3 bitmaps!");
-    }
+    Map<Long, Map<Integer, Integer>> blocks =
+        shuffleTaskManager.getFinishedBlocks(appId, shuffleId, requestPartitions);
+    assertEquals(expectedBlocks, blocks);
   }
 
   @Test
@@ -887,7 +883,6 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
     String storageBasePath = HDFS_URI + "rss/test";
     String appId = "testAddFinishedBlockIdsToExpiredApp";
     final int shuffleId = 1;
-    final int bitNum = 3;
     conf.set(ShuffleServerConf.RPC_SERVER_PORT, 1234);
     conf.set(ShuffleServerConf.RSS_COORDINATOR_QUORUM, "localhost:9527");
     conf.set(ShuffleServerConf.JETTY_HTTP_PORT, 12345);
@@ -908,9 +903,9 @@ public class ShuffleTaskManagerTest extends HadoopTestBase {
     StorageManager storageManager = shuffleServer.getStorageManager();
     ShuffleTaskManager shuffleTaskManager =
         new ShuffleTaskManager(conf, shuffleFlushManager, shuffleBufferManager, storageManager);
-    Map<Integer, long[]> blockIdsToReport = Maps.newHashMap();
+    Map<Integer, Integer> blocksToReport = Maps.newHashMap();
     try {
-      shuffleTaskManager.addFinishedBlockIds(appId, shuffleId, blockIdsToReport, bitNum);
+      shuffleTaskManager.addFinishedBlocks(appId, shuffleId, 0L, blocksToReport);
       fail("Exception should be thrown");
     } catch (RuntimeException e) {
       assertTrue(e.getMessage().equals("appId[" + appId + "] is expired!"));

@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.UnsafeByteOperations;
 import io.grpc.Context;
 import io.grpc.Status;
@@ -51,7 +50,6 @@ import org.apache.uniffle.common.exception.NoBufferException;
 import org.apache.uniffle.common.exception.NoBufferForHugePartitionException;
 import org.apache.uniffle.common.exception.NoRegisterException;
 import org.apache.uniffle.common.rpc.StatusCode;
-import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.ByteBufUtils;
 import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.proto.RssProtos;
@@ -69,7 +67,6 @@ import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultForMultiPartResponse;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.GetShuffleResultResponse;
-import org.apache.uniffle.proto.RssProtos.PartitionToBlockIds;
 import org.apache.uniffle.proto.RssProtos.RemoteStorageConfItem;
 import org.apache.uniffle.proto.RssProtos.ReportShuffleResultRequest;
 import org.apache.uniffle.proto.RssProtos.ReportShuffleResultResponse;
@@ -85,6 +82,7 @@ import org.apache.uniffle.proto.RssProtos.ShuffleDataBlockSegment;
 import org.apache.uniffle.proto.RssProtos.ShufflePartitionRange;
 import org.apache.uniffle.proto.RssProtos.ShuffleRegisterRequest;
 import org.apache.uniffle.proto.RssProtos.ShuffleRegisterResponse;
+import org.apache.uniffle.proto.RssProtos.TaskAttemptPartitionBlock;
 import org.apache.uniffle.proto.ShuffleServerGrpc.ShuffleServerImplBase;
 import org.apache.uniffle.server.buffer.PreAllocatedBufferInfo;
 import org.apache.uniffle.storage.common.Storage;
@@ -496,9 +494,7 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
     String appId = request.getAppId();
     int shuffleId = request.getShuffleId();
     long taskAttemptId = request.getTaskAttemptId();
-    int bitmapNum = request.getBitmapNum();
-    Map<Integer, long[]> partitionToBlockIds =
-        toPartitionBlocksMap(request.getPartitionToBlockIdsList());
+    Map<Integer, Integer> partitionToBlocks = request.getPartitionToBlocksMap();
     StatusCode status = StatusCode.SUCCESS;
     String msg = "OK";
     ReportShuffleResultResponse reply;
@@ -508,12 +504,12 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
     try {
       LOG.info(
           "Report "
-              + partitionToBlockIds.size()
+              + partitionToBlocks
               + " blocks as shuffle result for the task of "
               + requestInfo);
       shuffleServer
           .getShuffleTaskManager()
-          .addFinishedBlockIds(appId, shuffleId, partitionToBlockIds, bitmapNum);
+          .addFinishedBlocks(appId, shuffleId, taskAttemptId, partitionToBlocks);
     } catch (Exception e) {
       status = StatusCode.INTERNAL_ERROR;
       msg = "error happened when report shuffle result, check shuffle server for detail";
@@ -532,34 +528,36 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
     String appId = request.getAppId();
     int shuffleId = request.getShuffleId();
     int partitionId = request.getPartitionId();
-    BlockIdLayout blockIdLayout =
-        BlockIdLayout.from(
-            request.getBlockIdLayout().getSequenceNoBits(),
-            request.getBlockIdLayout().getPartitionIdBits(),
-            request.getBlockIdLayout().getTaskAttemptIdBits());
     StatusCode status = StatusCode.SUCCESS;
     String msg = "OK";
     GetShuffleResultResponse reply;
-    byte[] serializedBlockIds = null;
+    Map<Long, Map<Integer, Integer>> blocks;
     String requestInfo =
         "appId[" + appId + "], shuffleId[" + shuffleId + "], partitionId[" + partitionId + "]";
-    ByteString serializedBlockIdsBytes = ByteString.EMPTY;
+    Map<Long, Integer> taskAttemptBlocks = Maps.newHashMap();
 
     try {
-      serializedBlockIds =
+      blocks =
           shuffleServer
               .getShuffleTaskManager()
-              .getFinishedBlockIds(appId, shuffleId, Sets.newHashSet(partitionId), blockIdLayout);
-      if (serializedBlockIds == null) {
+              .getFinishedBlocks(appId, shuffleId, Sets.newHashSet(partitionId));
+      if (blocks == null) {
         status = StatusCode.INTERNAL_ERROR;
         msg = "Can't get shuffle result for " + requestInfo;
         LOG.warn(msg);
       } else {
-        serializedBlockIdsBytes = UnsafeByteOperations.unsafeWrap(serializedBlockIds);
+        taskAttemptBlocks =
+            blocks.entrySet().stream()
+                .filter(e -> e.getValue().containsKey(partitionId))
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().get(partitionId)));
       }
     } catch (Exception e) {
       status = StatusCode.INTERNAL_ERROR;
-      msg = e.getMessage();
+      if (e.getMessage() != null) {
+        msg = e.getMessage();
+      } else {
+        msg = "Internal error";
+      }
       LOG.error("Error happened when get shuffle result for {}", requestInfo, e);
     }
 
@@ -567,7 +565,7 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
         GetShuffleResultResponse.newBuilder()
             .setStatus(status.toProto())
             .setRetMsg(msg)
-            .setSerializedBitmap(serializedBlockIdsBytes)
+            .putAllTaskAttemptBlocks(taskAttemptBlocks)
             .build();
     responseObserver.onNext(reply);
     responseObserver.onCompleted();
@@ -580,32 +578,34 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
     String appId = request.getAppId();
     int shuffleId = request.getShuffleId();
     List<Integer> partitionsList = request.getPartitionsList();
-    BlockIdLayout blockIdLayout =
-        BlockIdLayout.from(
-            request.getBlockIdLayout().getSequenceNoBits(),
-            request.getBlockIdLayout().getPartitionIdBits(),
-            request.getBlockIdLayout().getTaskAttemptIdBits());
 
     StatusCode status = StatusCode.SUCCESS;
     String msg = "OK";
     GetShuffleResultForMultiPartResponse reply;
-    byte[] serializedBlockIds = null;
+    Map<Long, Map<Integer, Integer>> blocks = null;
     String requestInfo =
         "appId[" + appId + "], shuffleId[" + shuffleId + "], partitions" + partitionsList;
-    ByteString serializedBlockIdsBytes = ByteString.EMPTY;
+    List<TaskAttemptPartitionBlock> taskAttemptBlocks = null;
 
     try {
-      serializedBlockIds =
+      blocks =
           shuffleServer
               .getShuffleTaskManager()
-              .getFinishedBlockIds(
-                  appId, shuffleId, Sets.newHashSet(partitionsList), blockIdLayout);
-      if (serializedBlockIds == null) {
+              .getFinishedBlocks(appId, shuffleId, Sets.newHashSet(partitionsList));
+      if (blocks == null) {
         status = StatusCode.INTERNAL_ERROR;
         msg = "Can't get shuffle result for " + requestInfo;
         LOG.warn(msg);
       } else {
-        serializedBlockIdsBytes = UnsafeByteOperations.unsafeWrap(serializedBlockIds);
+        taskAttemptBlocks =
+            blocks.entrySet().stream()
+                .map(
+                    e ->
+                        TaskAttemptPartitionBlock.newBuilder()
+                            .setTaskAttemptId(e.getKey())
+                            .putAllPartitionBlocks(e.getValue())
+                            .build())
+                .collect(Collectors.toList());
       }
     } catch (Exception e) {
       status = StatusCode.INTERNAL_ERROR;
@@ -617,7 +617,7 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
         GetShuffleResultForMultiPartResponse.newBuilder()
             .setStatus(status.toProto())
             .setRetMsg(msg)
-            .setSerializedBitmap(serializedBlockIdsBytes)
+            .addAllTaskAttemptBlocks(taskAttemptBlocks)
             .build();
     responseObserver.onNext(reply);
     responseObserver.onCompleted();
@@ -977,21 +977,6 @@ public class ShuffleServerGrpcService extends ShuffleServerImplBase {
       i++;
     }
     return ret;
-  }
-
-  private Map<Integer, long[]> toPartitionBlocksMap(List<PartitionToBlockIds> partitionToBlockIds) {
-    Map<Integer, long[]> result = Maps.newHashMap();
-    for (PartitionToBlockIds ptb : partitionToBlockIds) {
-      List<Long> blockIds = ptb.getBlockIdsList();
-      if (blockIds != null && !blockIds.isEmpty()) {
-        long[] array = new long[blockIds.size()];
-        for (int i = 0; i < array.length; i++) {
-          array[i] = blockIds.get(i);
-        }
-        result.put(ptb.getPartitionId(), array);
-      }
-    }
-    return result;
   }
 
   private List<PartitionRange> toPartitionRanges(

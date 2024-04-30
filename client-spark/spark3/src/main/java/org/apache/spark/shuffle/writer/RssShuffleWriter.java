@@ -104,7 +104,6 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   private final boolean shouldPartition;
   private final long sendCheckTimeout;
   private final long sendCheckInterval;
-  private final int bitmapSplitNum;
   // server -> partitionId -> blockIds
   private Map<ShuffleServerInfo, Map<Integer, Set<Long>>> serverToPartitionToBlockIds;
   private final ShuffleWriteClient shuffleWriteClient;
@@ -186,7 +185,6 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     this.shouldPartition = partitioner.numPartitions() > 1;
     this.sendCheckTimeout = sparkConf.get(RssSparkConfig.RSS_CLIENT_SEND_CHECK_TIMEOUT_MS);
     this.sendCheckInterval = sparkConf.get(RssSparkConfig.RSS_CLIENT_SEND_CHECK_INTERVAL_MS);
-    this.bitmapSplitNum = sparkConf.get(RssSparkConfig.RSS_CLIENT_BITMAP_SPLIT_NUM);
     this.serverToPartitionToBlockIds = Maps.newHashMap();
     this.shuffleWriteClient = shuffleWriteClient;
     this.shuffleServersForData = shuffleHandleInfo.listAssignedServers();
@@ -633,12 +631,18 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     try {
       if (success) {
         long start = System.currentTimeMillis();
+        // TODO: assert block ids have expected taskAttemptId
+        // TODO: assert block ids have consecutive sequence numbers per partition id
+
         shuffleWriteClient.reportShuffleResult(
-            serverToPartitionToBlockIds, appId, shuffleId, taskAttemptId, bitmapSplitNum);
+            bufferManager.getPartitionBlockNums(),
+            serverToPartitionToBlockIds,
+            appId,
+            shuffleId,
+            taskAttemptId);
         LOG.info(
-            "Report shuffle result for task[{}] with bitmapNum[{}] cost {} ms",
+            "Report shuffle result for task[{}] cost {} ms",
             taskAttemptId,
-            bitmapSplitNum,
             (System.currentTimeMillis() - start));
         // todo: we can replace the dummy host and port with the real shuffle server which we prefer
         // to read

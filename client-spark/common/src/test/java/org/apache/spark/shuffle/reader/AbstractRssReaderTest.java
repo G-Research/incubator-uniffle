@@ -32,13 +32,14 @@ import com.google.common.collect.Sets;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
+import org.junit.jupiter.api.AfterEach;
 
 import org.apache.uniffle.common.ShufflePartitionedBlock;
 import org.apache.uniffle.common.compression.Codec;
 import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.ChecksumUtils;
+import org.apache.uniffle.common.util.JavaUtils;
 import org.apache.uniffle.storage.HadoopTestBase;
 import org.apache.uniffle.storage.handler.api.ShuffleWriteHandler;
 
@@ -46,7 +47,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public abstract class AbstractRssReaderTest extends HadoopTestBase {
 
-  private AtomicInteger atomicInteger = new AtomicInteger(0);
+  // next sequence number per partition
+  private Map<Integer, AtomicInteger> sequenceNumber = JavaUtils.newConcurrentMap();
+
+  @AfterEach
+  protected void afterEach() {
+    sequenceNumber.clear();
+  }
 
   protected void validateResult(
       Iterator iterator, Map<String, String> expectedData, int recordNum) {
@@ -67,7 +74,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int blockNum,
       int recordNum,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      Map<Long, Integer> blocks,
       String keyPrefix,
       Serializer serializer,
       int partitionID)
@@ -78,7 +85,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
         recordNum,
         BlockIdLayout.DEFAULT,
         expectedData,
-        blockIdBitmap,
+        blocks,
         keyPrefix,
         serializer,
         partitionID,
@@ -91,7 +98,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int recordNum,
       BlockIdLayout layout,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      Map<Long, Integer> blocks,
       String keyPrefix,
       Serializer serializer,
       int partitionID)
@@ -102,7 +109,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
         recordNum,
         layout,
         expectedData,
-        blockIdBitmap,
+        blocks,
         keyPrefix,
         serializer,
         partitionID,
@@ -114,7 +121,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int blockNum,
       int recordNum,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      Map<Long, Integer> blocks,
       String keyPrefix,
       Serializer serializer,
       int partitionID,
@@ -126,7 +133,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
         recordNum,
         BlockIdLayout.DEFAULT,
         expectedData,
-        blockIdBitmap,
+        blocks,
         keyPrefix,
         serializer,
         partitionID,
@@ -139,7 +146,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int recordNum,
       BlockIdLayout layout,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      Map<Long, Integer> writtenBlocks,
       String keyPrefix,
       Serializer serializer,
       int partitionID,
@@ -156,11 +163,17 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
         expectedData.put(key, value);
         writeData(serializeStream, key, value);
       }
-      long blockId = layout.getBlockId(atomicInteger.getAndIncrement(), partitionID, 0);
-      blockIdBitmap.add(blockId);
+      int sequenceNo =
+          sequenceNumber
+              .computeIfAbsent(partitionID, pid -> new AtomicInteger(0))
+              .getAndIncrement();
+      long blockId = layout.getBlockId(sequenceNo, partitionID, 0);
       blocks.add(createShuffleBlock(output.toBytes(), blockId, compress));
       serializeStream.close();
     }
+    // next sequence number provides us number of blocks here
+    int numberOfBlocks = sequenceNumber.get(partitionID).get();
+    writtenBlocks.put(0L, numberOfBlocks);
     handler.write(blocks);
   }
 

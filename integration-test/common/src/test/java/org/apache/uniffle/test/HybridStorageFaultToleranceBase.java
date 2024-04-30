@@ -17,7 +17,6 @@
 
 package org.apache.uniffle.test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -145,11 +144,11 @@ public abstract class HybridStorageFaultToleranceBase extends ShuffleReadWriteBa
     shuffleServerClient.sendCommit(rc);
     shuffleServerClient.finishShuffle(rf);
 
-    Map<Integer, List<Long>> partitionToBlockIds = Maps.newHashMap();
+    Map<Integer, Integer> partitionToBlockNum = Maps.newHashMap();
     Set<Long> expectBlockIds = getExpectBlockIds(blocks);
-    partitionToBlockIds.put(shuffle, new ArrayList<>(expectBlockIds));
+    partitionToBlockNum.put(partition, expectBlockIds.size());
     RssReportShuffleResultRequest rrp =
-        new RssReportShuffleResultRequest(appId, shuffle, taskAttemptId, partitionToBlockIds, 1);
+        new RssReportShuffleResultRequest(appId, shuffle, taskAttemptId, partitionToBlockNum);
     shuffleServerClient.reportShuffleResult(rrp);
   }
 

@@ -25,21 +25,18 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
-import java.util.stream.Stream;
 import javax.net.ServerSocketFactory;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.ShuffleServerInfo;
@@ -229,35 +226,61 @@ public class RssUtilsTest {
     assertEquals(testStr, extsObjs.get(0).get());
   }
 
-  public static Stream<Arguments> testBlockIdLayouts() {
-    return Stream.of(
-        Arguments.of(BlockIdLayout.DEFAULT), Arguments.of(BlockIdLayout.from(20, 21, 22)));
-  }
+  @Test
+  public void testGeneratePartitionToBlocks() {
+    Map<Long, Map<Integer, Integer>> taskAttemptPartitionBlocks = Maps.newHashMap();
+    Map<Integer, Map<Long, Integer>> partitionTaskAttemptBlocks =
+        RssUtils.generatePartitionToBlocks(taskAttemptPartitionBlocks);
+    Map<Integer, Map<Long, Integer>> expected = Maps.newHashMap();
+    assertEquals(expected, partitionTaskAttemptBlocks);
 
-  @ParameterizedTest
-  @MethodSource("testBlockIdLayouts")
-  public void testShuffleBitmapToPartitionBitmap(BlockIdLayout layout) {
-    Roaring64NavigableMap partition1Bitmap =
-        Roaring64NavigableMap.bitmapOf(
-            layout.getBlockId(0, 0, 0),
-            layout.getBlockId(1, 0, 0),
-            layout.getBlockId(0, 0, 1),
-            layout.getBlockId(1, 0, 1));
-    Roaring64NavigableMap partition2Bitmap =
-        Roaring64NavigableMap.bitmapOf(
-            layout.getBlockId(0, 1, 0),
-            layout.getBlockId(1, 1, 0),
-            layout.getBlockId(0, 1, 1),
-            layout.getBlockId(1, 1, 1));
-    Roaring64NavigableMap shuffleBitmap = Roaring64NavigableMap.bitmapOf();
-    shuffleBitmap.or(partition1Bitmap);
-    shuffleBitmap.or(partition2Bitmap);
-    assertEquals(8, shuffleBitmap.getLongCardinality());
-    Map<Integer, Roaring64NavigableMap> toPartitionBitmap =
-        RssUtils.generatePartitionToBitmap(shuffleBitmap, 0, 2, layout);
-    assertEquals(2, toPartitionBitmap.size());
-    assertEquals(partition1Bitmap, toPartitionBitmap.get(0));
-    assertEquals(partition2Bitmap, toPartitionBitmap.get(1));
+    taskAttemptPartitionBlocks.put(1L, Maps.newHashMap());
+    partitionTaskAttemptBlocks = RssUtils.generatePartitionToBlocks(taskAttemptPartitionBlocks);
+    assertEquals(expected, partitionTaskAttemptBlocks);
+
+    taskAttemptPartitionBlocks.get(1L).put(2, 3);
+    partitionTaskAttemptBlocks = RssUtils.generatePartitionToBlocks(taskAttemptPartitionBlocks);
+    expected.put(
+        2,
+        new HashMap<Long, Integer>() {
+          {
+            put(1L, 3);
+          }
+        });
+    assertEquals(expected, partitionTaskAttemptBlocks);
+
+    taskAttemptPartitionBlocks.get(1L).put(4, 5);
+    partitionTaskAttemptBlocks = RssUtils.generatePartitionToBlocks(taskAttemptPartitionBlocks);
+    expected.put(
+        4,
+        new HashMap<Long, Integer>() {
+          {
+            put(1L, 5);
+          }
+        });
+    assertEquals(expected, partitionTaskAttemptBlocks);
+
+    taskAttemptPartitionBlocks.put(
+        6L,
+        new HashMap<Integer, Integer>() {
+          {
+            put(7, 8);
+          }
+        });
+    partitionTaskAttemptBlocks = RssUtils.generatePartitionToBlocks(taskAttemptPartitionBlocks);
+    expected.put(
+        7,
+        new HashMap<Long, Integer>() {
+          {
+            put(6L, 8);
+          }
+        });
+    assertEquals(expected, partitionTaskAttemptBlocks);
+
+    taskAttemptPartitionBlocks.get(6L).put(2, 9);
+    partitionTaskAttemptBlocks = RssUtils.generatePartitionToBlocks(taskAttemptPartitionBlocks);
+    expected.get(2).put(6L, 9);
+    assertEquals(expected, partitionTaskAttemptBlocks);
   }
 
   @Test

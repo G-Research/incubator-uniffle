@@ -249,6 +249,7 @@ public class RssSparkConfig {
       createStringBuilder(new ConfigBuilder("spark.rss.ozone.fs.AbstractFileSystem.hdfs.impl"))
           .createWithDefault("org.apache.hadoop.odfs.HdfsOdfs");
 
+  // TODO: deprecate
   public static final ConfigEntry<Integer> RSS_CLIENT_BITMAP_SPLIT_NUM =
       createIntegerBuilder(new ConfigBuilder("spark.rss.client.bitmap.splitNum"))
           .createWithDefault(1);

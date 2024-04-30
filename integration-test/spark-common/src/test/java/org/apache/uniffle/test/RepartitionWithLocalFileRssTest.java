@@ -37,6 +37,7 @@ import org.apache.uniffle.server.ShuffleServerConf;
 import org.apache.uniffle.storage.util.StorageType;
 
 import static org.apache.uniffle.common.config.RssClientConf.COMPRESSION_TYPE;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class RepartitionWithLocalFileRssTest extends RepartitionTest {
 
@@ -85,7 +86,7 @@ public class RepartitionWithLocalFileRssTest extends RepartitionTest {
     }
 
     for (int i = 1; i < results.size(); i++) {
-      verifyTestResult(results.get(0), results.get(i));
+      assertEquals(results.get(0), results.get(i));
     }
   }
 }

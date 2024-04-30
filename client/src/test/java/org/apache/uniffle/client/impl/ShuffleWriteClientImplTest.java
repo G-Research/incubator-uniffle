@@ -18,7 +18,9 @@
 package org.apache.uniffle.client.impl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -33,7 +35,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.api.ShuffleServerClient;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
@@ -45,20 +46,15 @@ import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
-import org.apache.uniffle.common.exception.RssException;
 import org.apache.uniffle.common.netty.IOMode;
 import org.apache.uniffle.common.rpc.StatusCode;
 import org.apache.uniffle.common.util.BlockIdLayout;
-import org.apache.uniffle.common.util.RssUtils;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ShuffleWriteClientImplTest {
@@ -364,21 +360,20 @@ public class ShuffleWriteClientImplTest {
     ShuffleWriteClientImpl spyClient = Mockito.spy(shuffleWriteClient);
     doReturn(mockShuffleServerClient).when(spyClient).getShuffleServerClient(any());
     RssGetShuffleResultResponse response;
-    try {
-      Roaring64NavigableMap res = Roaring64NavigableMap.bitmapOf(1L, 2L, 5L);
-      response = new RssGetShuffleResultResponse(StatusCode.SUCCESS, RssUtils.serializeBitMap(res));
-    } catch (Exception e) {
-      throw new RssException(e);
-    }
+    Map<Long, Integer> blocks =
+        new HashMap<Long, Integer>() {
+          {
+            put(0L, 3);
+          }
+        };
+    response = new RssGetShuffleResultResponse(StatusCode.SUCCESS, blocks);
     when(mockShuffleServerClient.getShuffleResult(any())).thenReturn(response);
 
     Set<ShuffleServerInfo> shuffleServerInfoSet =
         Sets.newHashSet(new ShuffleServerInfo("id", "host", 0));
-    Roaring64NavigableMap result =
+    Map<Long, Integer> result =
         spyClient.getShuffleResult("GRPC", shuffleServerInfoSet, "appId", 1, 2);
 
-    verify(mockShuffleServerClient)
-        .getShuffleResult(argThat(request -> request.getBlockIdLayout().equals(layout)));
-    assertArrayEquals(result.stream().sorted().toArray(), new long[] {1L, 2L, 5L});
+    assertEquals(result, blocks);
   }
 }

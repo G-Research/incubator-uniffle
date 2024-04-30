@@ -185,10 +185,10 @@ public class ShuffleServerWithLocalTest extends ShuffleReadWriteBase {
 
     List<ShuffleServer> shuffleServers = isNettyMode ? nettyShuffleServers : grpcShuffleServers;
     assertNotNull(
-        shuffleServers.get(0).getShuffleTaskManager().getPartitionsToBlockIds().get(testAppId));
+        shuffleServers.get(0).getShuffleTaskManager().getPartitionsToBlocks().get(testAppId));
     Thread.sleep(8000);
     assertNull(
-        shuffleServers.get(0).getShuffleTaskManager().getPartitionsToBlockIds().get(testAppId));
+        shuffleServers.get(0).getShuffleTaskManager().getPartitionsToBlocks().get(testAppId));
   }
 
   protected void validateResult(

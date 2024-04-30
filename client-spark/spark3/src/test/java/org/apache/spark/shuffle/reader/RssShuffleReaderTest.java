@@ -61,11 +61,11 @@ public class RssShuffleReaderTest extends AbstractRssReaderTest {
     final HadoopShuffleWriteHandler writeHandler1 =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, ssi.getId(), conf);
 
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<Long, Integer> blocks = Maps.newHashMap();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     Map<String, String> expectedData = Maps.newHashMap();
-    final Roaring64NavigableMap blockIdBitmap1 = Roaring64NavigableMap.bitmapOf();
-    writeTestData(writeHandler, 2, 5, expectedData, blockIdBitmap, "key", KRYO_SERIALIZER, 0);
+    final Map<Long, Integer> blocks1 = Maps.newHashMap();
+    writeTestData(writeHandler, 2, 5, expectedData, blocks, "key", KRYO_SERIALIZER, 0);
 
     RssShuffleHandle<String, String, String> handleMock = mock(RssShuffleHandle.class);
     ShuffleDependency<String, String, String> dependencyMock = mock(ShuffleDependency.class);
@@ -87,8 +87,8 @@ public class RssShuffleReaderTest extends AbstractRssReaderTest {
     when(dependencyMock.keyOrdering()).thenReturn(Option.empty());
     when(dependencyMock.mapSideCombine()).thenReturn(false);
 
-    Map<Integer, Roaring64NavigableMap> partitionToExpectBlocks = Maps.newHashMap();
-    partitionToExpectBlocks.put(0, blockIdBitmap);
+    Map<Integer, Map<Long, Integer>> partitionToExpectBlocks = Maps.newHashMap();
+    partitionToExpectBlocks.put(0, blocks);
     RssConf rssConf = new RssConf();
     rssConf.set(RssClientConf.RSS_STORAGE_TYPE, StorageType.HDFS.name());
     rssConf.set(RssClientConf.RSS_INDEX_READ_LIMIT, 1000);
@@ -113,9 +113,8 @@ public class RssShuffleReaderTest extends AbstractRssReaderTest {
                 partitionToServers));
     validateResult(rssShuffleReaderSpy.read(), expectedData, 10);
 
-    writeTestData(
-        writeHandler1, 2, 4, expectedData, blockIdBitmap1, "another_key", KRYO_SERIALIZER, 1);
-    partitionToExpectBlocks.put(1, blockIdBitmap1);
+    writeTestData(writeHandler1, 2, 4, expectedData, blocks1, "another_key", KRYO_SERIALIZER, 1);
+    partitionToExpectBlocks.put(1, blocks1);
     RssShuffleReader<String, String> rssShuffleReaderSpy1 =
         spy(
             new RssShuffleReader<>(
@@ -135,25 +134,5 @@ public class RssShuffleReaderTest extends AbstractRssReaderTest {
                 ShuffleDataDistributionType.NORMAL,
                 partitionToServers));
     validateResult(rssShuffleReaderSpy1.read(), expectedData, 18);
-
-    RssShuffleReader<String, String> rssShuffleReaderSpy2 =
-        spy(
-            new RssShuffleReader<>(
-                0,
-                2,
-                0,
-                Integer.MAX_VALUE,
-                contextMock,
-                handleMock,
-                basePath,
-                conf,
-                2,
-                partitionToExpectBlocks,
-                Roaring64NavigableMap.bitmapOf(),
-                new ShuffleReadMetrics(),
-                rssConf,
-                ShuffleDataDistributionType.NORMAL,
-                partitionToServers));
-    validateResult(rssShuffleReaderSpy2.read(), Maps.newHashMap(), 0);
   }
 }

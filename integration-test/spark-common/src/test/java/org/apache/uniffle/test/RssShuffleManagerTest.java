@@ -20,7 +20,6 @@ package org.apache.uniffle.test;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -43,7 +42,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.api.ShuffleWriteClient;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
@@ -53,7 +51,6 @@ import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.rpc.ServerType;
-import org.apache.uniffle.common.util.BlockId;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.shuffle.manager.RssShuffleManagerBase;
@@ -225,19 +222,19 @@ public class RssShuffleManagerTest extends SparkIntegrationTestBase {
               .collect(Collectors.toSet());
 
       for (int partitionId : new int[] {0, 1}) {
-        Roaring64NavigableMap blockIdLongs =
+        Map<Long, Integer> blockNums =
             shuffleWriteClient.getShuffleResult(
                 ClientType.GRPC.name(), servers, shuffleManager.getAppId(), 0, partitionId);
-        List<BlockId> blockIds =
-            blockIdLongs.stream()
-                .sorted()
-                .mapToObj(expectedLayout::asBlockId)
-                .collect(Collectors.toList());
-        assertEquals(2, blockIds.size());
         long taskAttemptId0 = shuffleManager.getTaskAttemptIdForBlockId(0, 0);
         long taskAttemptId1 = shuffleManager.getTaskAttemptIdForBlockId(1, 0);
-        assertEquals(expectedLayout.asBlockId(0, partitionId, taskAttemptId0), blockIds.get(0));
-        assertEquals(expectedLayout.asBlockId(0, partitionId, taskAttemptId1), blockIds.get(1));
+        assertEquals(
+            new HashMap<Long, Integer>() {
+              {
+                put(taskAttemptId0, 1);
+                put(taskAttemptId1, 1);
+              }
+            },
+            blockNums);
       }
 
       shuffleManager.unregisterAllMapOutput(0);

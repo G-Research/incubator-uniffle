@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.junit.jupiter.api.BeforeEach;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.TestUtils;
@@ -45,9 +46,14 @@ import org.apache.uniffle.common.util.ChecksumUtils;
 
 public abstract class ShuffleReadWriteBase extends IntegrationTestBase {
   private static BlockIdLayout LAYOUT = BlockIdLayout.DEFAULT;
-  private static AtomicInteger ATOMIC_INT = new AtomicInteger(0);
+  protected static Map<Integer, AtomicInteger> partitionSequenceNos = Maps.newHashMap();
   public static List<ShuffleServerInfo> mockSSI =
       Lists.newArrayList(new ShuffleServerInfo("id", "host", 0));
+
+  @BeforeEach
+  protected void beforeEach() {
+    partitionSequenceNos.clear();
+  }
 
   public static List<ShuffleBlockInfo> createShuffleBlockList(
       int shuffleId,
@@ -62,9 +68,12 @@ public abstract class ShuffleReadWriteBase extends IntegrationTestBase {
     for (int i = 0; i < blockNum; i++) {
       byte[] buf = new byte[length];
       new Random().nextBytes(buf);
-      int seqno = ATOMIC_INT.getAndIncrement();
+      int seqno =
+          partitionSequenceNos
+              .computeIfAbsent(partitionId, pid -> new AtomicInteger(0))
+              .getAndIncrement();
 
-      long blockId = LAYOUT.getBlockId(seqno, 0, taskAttemptId);
+      long blockId = LAYOUT.getBlockId(seqno, partitionId, taskAttemptId);
       blockIdBitmap.addLong(blockId);
       dataMap.put(blockId, buf);
       shuffleBlockInfoList.add(

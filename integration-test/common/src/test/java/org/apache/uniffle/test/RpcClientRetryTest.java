@@ -148,7 +148,7 @@ public class RpcClientRetryTest extends ShuffleReadWriteBase {
   @ParameterizedTest
   @MethodSource("testRpcRetryLogicProvider")
   public void testRpcRetryLogic(StorageType storageType) {
-    String testAppId = "testRpcRetryLogic";
+    String testAppId = "testRpcRetryLogic-" + storageType;
     registerShuffleServer(testAppId, 3, 2, 2, true);
     Map<Long, byte[]> expectedData = Maps.newHashMap();
     Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
