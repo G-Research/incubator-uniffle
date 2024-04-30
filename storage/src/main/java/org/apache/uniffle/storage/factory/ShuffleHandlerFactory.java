@@ -121,12 +121,6 @@ public class ShuffleHandlerFactory {
     ShuffleServerClient shuffleServerClient =
         ShuffleServerClientFactory.getInstance()
             .getShuffleServerClient(request.getClientType().name(), ssi, request.getClientConf());
-    Roaring64NavigableMap expectTaskIds = null;
-    if (request.isExpectedTaskIdsBitmapFilterEnable()) {
-      Roaring64NavigableMap realExceptBlockIds = RssUtils.cloneBitMap(request.getExpectBlockIds());
-      realExceptBlockIds.xor(request.getProcessBlockIds());
-      expectTaskIds = RssUtils.generateTaskIdBitMap(realExceptBlockIds, request.getIdHelper());
-    }
     ClientReadHandler memoryClientReadHandler =
         new MemoryClientReadHandler(
             request.getAppId(),
@@ -134,7 +128,7 @@ public class ShuffleHandlerFactory {
             request.getPartitionId(),
             request.getReadBufferSize(),
             shuffleServerClient,
-            expectTaskIds,
+            request.getExpectTaskIds(),
             request.getRetryMax(),
             request.getRetryIntervalMax());
     return memoryClientReadHandler;
