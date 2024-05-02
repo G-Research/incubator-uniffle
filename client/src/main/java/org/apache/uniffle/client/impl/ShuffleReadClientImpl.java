@@ -23,7 +23,6 @@ import java.util.Queue;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
@@ -34,7 +33,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.uniffle.client.api.ShuffleReadClient;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
 import org.apache.uniffle.client.response.CompressedShuffleBlock;
-import org.apache.uniffle.client.util.DefaultIdHelper;
 import org.apache.uniffle.common.BufferSegment;
 import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleDataResult;
@@ -44,7 +42,6 @@ import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.exception.RssFetchFailedException;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.ChecksumUtils;
-import org.apache.uniffle.common.util.IdHelper;
 import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.storage.factory.ShuffleHandlerFactory;
 import org.apache.uniffle.storage.handler.api.ClientReadHandler;
@@ -67,7 +64,6 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
   private AtomicLong copyTime = new AtomicLong(0);
   private AtomicLong crcCheckTime = new AtomicLong(0);
   private ClientReadHandler clientReadHandler;
-  private IdHelper idHelper;
   private BlockIdLayout blockIdLayout;
 
   public ShuffleReadClientImpl(ShuffleClientFactory.ReadClientBuilder builder) {
@@ -133,9 +129,6 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
       builder.expectedTaskIdsBitmapFilterEnable(false);
       builder.clientType(rssConf.get(RssClientConf.RSS_CLIENT_TYPE));
     }
-    if (builder.getIdHelper() == null) {
-      builder.idHelper(new DefaultIdHelper(BlockIdLayout.from(builder.getRssConf())));
-    }
 
     init(builder);
   }
@@ -145,7 +138,6 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
     this.partitionId = builder.getPartitionId();
     this.blockIdBitmap = builder.getBlockIdBitmap();
     this.taskIdBitmap = builder.getTaskIdBitmap();
-    this.idHelper = builder.getIdHelper();
     this.shuffleServerInfoList = builder.getShuffleServerInfoList();
     this.blockIdLayout = BlockIdLayout.from(builder.getRssConf());
 
@@ -164,7 +156,6 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
     request.setExpectBlockIds(blockIdBitmap);
     request.setProcessBlockIds(processedBlockIds);
     request.setDistributionType(builder.getShuffleDataDistributionType());
-    request.setIdHelper(idHelper);
     request.setExpectTaskIds(taskIdBitmap);
     request.setClientConf(builder.getRssConf());
     request.setClientType(builder.getClientType());
@@ -175,18 +166,6 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
     }
     if (builder.isOffHeapEnable()) {
       request.enableOffHeap();
-    }
-
-    List<Long> removeBlockIds = Lists.newArrayList();
-    blockIdBitmap.forEach(
-        bid -> {
-          if (!taskIdBitmap.contains(idHelper.getTaskAttemptId(bid))) {
-            removeBlockIds.add(bid);
-          }
-        });
-
-    for (long rid : removeBlockIds) {
-      blockIdBitmap.removeLong(rid);
     }
 
     // copy blockIdBitmap to track all pending blocks

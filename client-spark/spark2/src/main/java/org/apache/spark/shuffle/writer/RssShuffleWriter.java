@@ -95,6 +95,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   private int numMaps;
   private int shuffleId;
   private int bitmapSplitNum;
+  private int mapIndex;
   private String taskId;
   private long taskAttemptId;
   private ShuffleDependency<K, V, C> shuffleDependency;
@@ -114,6 +115,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   public RssShuffleWriter(
       String appId,
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       WriteBufferManager bufferManager,
@@ -127,6 +129,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     this(
         appId,
         shuffleId,
+        mapIndex,
         taskId,
         taskAttemptId,
         shuffleWriteMetrics,
@@ -143,6 +146,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   private RssShuffleWriter(
       String appId,
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       ShuffleWriteMetrics shuffleWriteMetrics,
@@ -155,6 +159,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
       TaskContext context) {
     this.appId = appId;
     this.shuffleId = shuffleId;
+    this.mapIndex = mapIndex;
     this.taskId = taskId;
     this.taskAttemptId = taskAttemptId;
     this.numMaps = rssHandle.getNumMaps();
@@ -180,6 +185,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
   public RssShuffleWriter(
       String appId,
       int shuffleId,
+      int mapIndex,
       String taskId,
       long taskAttemptId,
       ShuffleWriteMetrics shuffleWriteMetrics,
@@ -193,6 +199,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     this(
         appId,
         shuffleId,
+        mapIndex,
         taskId,
         taskAttemptId,
         shuffleWriteMetrics,
@@ -207,6 +214,7 @@ public class RssShuffleWriter<K, V, C> extends ShuffleWriter<K, V> {
     final WriteBufferManager bufferManager =
         new WriteBufferManager(
             shuffleId,
+            mapIndex,
             taskId,
             taskAttemptId,
             bufferOptions,

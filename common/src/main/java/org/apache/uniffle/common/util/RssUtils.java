@@ -393,16 +393,6 @@ public class RssUtils {
     }
   }
 
-  public static Roaring64NavigableMap generateTaskIdBitMap(
-      Roaring64NavigableMap blockIdBitmap, IdHelper idHelper) {
-    Iterator<Long> iterator = blockIdBitmap.iterator();
-    Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf();
-    while (iterator.hasNext()) {
-      taskIdBitmap.addLong(idHelper.getTaskAttemptId(iterator.next()));
-    }
-    return taskIdBitmap;
-  }
-
   public static List<String> getConfiguredLocalDirs(RssConf conf) {
     if (conf.getEnv(RSS_LOCAL_DIR_KEY) != null) {
       return Arrays.asList(conf.getEnv(RSS_LOCAL_DIR_KEY).split(","));

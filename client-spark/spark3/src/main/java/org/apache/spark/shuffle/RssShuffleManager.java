@@ -529,6 +529,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
     return new RssShuffleWriter<>(
         rssHandle.getAppId(),
         shuffleId,
+        context.partitionId(),
         taskId,
         getTaskAttemptIdForBlockId(context.partitionId(), context.attemptNumber()),
         writeMetrics,
@@ -671,7 +672,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
     Map<ShuffleServerInfo, Set<Integer>> serverToPartitions =
         getPartitionDataServers(shuffleHandleInfo, startPartition, endPartition);
     long start = System.currentTimeMillis();
-    Map<Long, Map<Integer, Integer>> blocks =
+    Map<Long, Map<Integer, Integer>> allBlockIdBitmap =
         getShuffleResultForMultiPart(
             clientType,
             serverToPartitions,
@@ -683,7 +684,7 @@ public class RssShuffleManager extends RssShuffleManagerBase {
         "Get shuffle blockId cost "
             + (System.currentTimeMillis() - start)
             + " ms, and get "
-            + blocks.values().stream()
+            + allBlockIdBitmap.values().stream()
                 .mapToInt(m -> m.values().stream().mapToInt(i -> i).sum())
                 .sum()
             + " blockIds for shuffleId["
@@ -693,6 +694,35 @@ public class RssShuffleManager extends RssShuffleManagerBase {
             + "], endPartition["
             + endPartition
             + "]");
+
+    // filter for those blockIds that are within [startMapIndex,endMapIndex)
+    // used especially for AQE skew optimization
+    Roaring64NavigableMap blockIdBitmap;
+    if (startMapIndex == 0 && endMapIndex == Integer.MAX_VALUE) {
+      blockIdBitmap = allBlockIdBitmap;
+    } else {
+      blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+      allBlockIdBitmap.stream()
+          .forEach(
+              blockId -> {
+                int mapIndex = blockIdLayout.getTaskAttemptId(blockId);
+                if (mapIndex >= startMapIndex && mapIndex < endMapIndex) {
+                  blockIdBitmap.add(blockId);
+                }
+              });
+      if (allBlockIdBitmap.getLongCardinality() != blockIdBitmap.getLongCardinality()) {
+        LOG.info(
+            "Filtered blockIds by mapIndex["
+                + startMapIndex
+                + ","
+                + endMapIndex
+                + ") range from "
+                + allBlockIdBitmap.getLongCardinality()
+                + " to "
+                + blockIdBitmap.getLongCardinality()
+                + " blockIds");
+      }
+    }
 
     ShuffleReadMetrics readMetrics;
     if (metrics != null) {
