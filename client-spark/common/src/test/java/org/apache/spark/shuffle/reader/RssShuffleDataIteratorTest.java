@@ -44,9 +44,11 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import org.apache.uniffle.client.api.ShuffleReadClient;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
 import org.apache.uniffle.client.impl.ShuffleReadClientImpl;
+import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.util.BlockIdLayout;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.common.util.ChecksumUtils;
 import org.apache.uniffle.storage.handler.impl.HadoopShuffleWriteHandler;
 import org.apache.uniffle.storage.util.StorageType;
@@ -81,7 +83,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
     Map<String, String> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(
         writeHandler, 2, 5, layout, expectedData, blockIdBitmap, "key", KRYO_SERIALIZER, 0);
@@ -110,7 +112,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
 
   private RssShuffleDataIterator getDataIterator(
       String basePath,
-      Roaring64NavigableMap blockIdBitmap,
+      BlockIdSet blockIdBitmap,
       Roaring64NavigableMap taskIdBitmap,
       List<ShuffleServerInfo> serverInfos) {
     return getDataIterator(basePath, blockIdBitmap, taskIdBitmap, serverInfos, true);
@@ -118,12 +120,13 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
 
   private RssShuffleDataIterator getDataIterator(
       String basePath,
-      Roaring64NavigableMap blockIdBitmap,
+      BlockIdSet blockIdBitmap,
       Roaring64NavigableMap taskIdBitmap,
       List<ShuffleServerInfo> serverInfos,
       boolean compress) {
     ShuffleReadClientImpl readClient =
         ShuffleClientFactory.newReadBuilder()
+            .clientType(ClientType.GRPC)
             .storageType(StorageType.HDFS.name())
             .appId("appId")
             .shuffleId(0)
@@ -162,7 +165,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi2.getId(), conf);
 
     Map<String, String> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler1, 2, 5, expectedData, blockIdBitmap, "key1", KRYO_SERIALIZER, 0);
     writeTestData(writeHandler2, 2, 5, expectedData, blockIdBitmap, "key2", KRYO_SERIALIZER, 0);
@@ -203,7 +206,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
     Map<String, String> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler, 2, 5, expectedData, blockIdBitmap, "key", KRYO_SERIALIZER, 0);
 
@@ -236,7 +239,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
     Map<String, String> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler, 2, 5, expectedData, blockIdBitmap, "key", KRYO_SERIALIZER, 0);
 
@@ -262,7 +265,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi1.getId(), conf);
 
     Map<String, String> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(writeHandler, 2, 5, expectedData, blockIdBitmap, "key", KRYO_SERIALIZER, 0);
 
@@ -309,7 +312,7 @@ public class RssShuffleDataIteratorTest extends AbstractRssReaderTest {
         new HadoopShuffleWriteHandler("appId", 0, 0, 1, basePath, ssi2.getId(), conf);
 
     Map<String, String> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     writeTestData(
         writeHandler1, 2, 5, expectedData, blockIdBitmap, "key1", KRYO_SERIALIZER, 0, compress);

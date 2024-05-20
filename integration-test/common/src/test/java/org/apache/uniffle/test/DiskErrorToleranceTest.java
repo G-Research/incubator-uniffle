@@ -51,10 +51,9 @@ import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.PartitionRange;
 import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
-import org.apache.uniffle.common.config.RssClientConf;
-import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.rpc.ServerType;
 import org.apache.uniffle.common.rpc.StatusCode;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.coordinator.CoordinatorServer;
 import org.apache.uniffle.server.ShuffleServer;
@@ -99,11 +98,8 @@ public class DiskErrorToleranceTest extends ShuffleReadWriteBase {
     grpcShuffleServerClient =
         new ShuffleServerGrpcClient(
             LOCALHOST, grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT));
-    RssConf rssConf = new RssConf();
-    rssConf.set(RssClientConf.RSS_CLIENT_TYPE, ClientType.GRPC_NETTY);
     nettyShuffleServerClient =
         new ShuffleServerGrpcNettyClient(
-            rssConf,
             LOCALHOST,
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT),
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.NETTY_SERVER_PORT));
@@ -171,7 +167,7 @@ public class DiskErrorToleranceTest extends ShuffleReadWriteBase {
     String appId = "ap_disk_error_data";
     Map<Long, byte[]> expectedData = Maps.newHashMap();
     Set<Long> expectedBlock1 = Sets.newHashSet();
-    Roaring64NavigableMap blockIdBitmap1 = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap1 = BlockIdSet.empty();
     List<ShuffleBlockInfo> blocks1 =
         createShuffleBlockList(0, 0, 1, 3, 25, blockIdBitmap1, expectedData);
     RssRegisterShuffleRequest rr1 =
@@ -193,6 +189,7 @@ public class DiskErrorToleranceTest extends ShuffleReadWriteBase {
         isNettyMode ? nettyShuffleServerInfoList : grpcShuffleServerInfoList;
     ShuffleReadClientImpl readClient =
         ShuffleClientFactory.newReadBuilder()
+            .clientType(isNettyMode ? ClientType.GRPC_NETTY : ClientType.GRPC)
             .storageType(StorageType.LOCALFILE.name())
             .appId(appId)
             .shuffleId(0)
@@ -216,7 +213,7 @@ public class DiskErrorToleranceTest extends ShuffleReadWriteBase {
     expectedData.clear();
     partitionToBlocks.clear();
     shuffleToBlocks.clear();
-    Roaring64NavigableMap blockIdBitmap2 = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap2 = BlockIdSet.empty();
     Set<Long> expectedBlock2 = Sets.newHashSet();
     List<ShuffleBlockInfo> blocks2 =
         createShuffleBlockList(0, 0, 2, 5, 30, blockIdBitmap2, expectedData);

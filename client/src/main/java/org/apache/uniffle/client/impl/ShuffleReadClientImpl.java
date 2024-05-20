@@ -43,6 +43,7 @@ import org.apache.uniffle.common.config.RssClientConf;
 import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.exception.RssFetchFailedException;
 import org.apache.uniffle.common.util.BlockIdLayout;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.common.util.ChecksumUtils;
 import org.apache.uniffle.common.util.IdHelper;
 import org.apache.uniffle.common.util.RssUtils;
@@ -58,10 +59,10 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
   private int partitionId;
   private ByteBuffer readBuffer;
   private ShuffleDataResult sdr;
-  private Roaring64NavigableMap blockIdBitmap;
+  private BlockIdSet blockIdBitmap;
   private Roaring64NavigableMap taskIdBitmap;
-  private Roaring64NavigableMap pendingBlockIds;
-  private Roaring64NavigableMap processedBlockIds = Roaring64NavigableMap.bitmapOf();
+  private BlockIdSet pendingBlockIds;
+  private BlockIdSet processedBlockIds = BlockIdSet.empty();
   private Queue<BufferSegment> bufferSegmentQueue = Queues.newLinkedBlockingQueue();
   private AtomicLong readDataTime = new AtomicLong(0);
   private AtomicLong copyTime = new AtomicLong(0);
@@ -102,12 +103,13 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
         readBufferSize = Integer.MAX_VALUE;
       }
       boolean offHeapEnabled = builder.getRssConf().get(RssClientConf.OFF_HEAP_MEMORY_ENABLE);
-
       builder.indexReadLimit(indexReadLimit);
       builder.storageType(storageType);
       builder.readBufferSize(readBufferSize);
       builder.offHeapEnable(offHeapEnabled);
-      builder.clientType(builder.getRssConf().get(RssClientConf.RSS_CLIENT_TYPE));
+      if (builder.getClientType() == null) {
+        builder.clientType(builder.getRssConf().get(RssClientConf.RSS_CLIENT_TYPE));
+      }
     } else {
       // most for test
       RssConf rssConf = (builder.getRssConf() == null) ? new RssConf() : builder.getRssConf();
@@ -131,7 +133,9 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
       builder.rssConf(rssConf);
       builder.offHeapEnable(false);
       builder.expectedTaskIdsBitmapFilterEnable(false);
-      builder.clientType(rssConf.get(RssClientConf.RSS_CLIENT_TYPE));
+      if (builder.getClientType() == null) {
+        builder.clientType(rssConf.get(RssClientConf.RSS_CLIENT_TYPE));
+      }
     }
     if (builder.getIdHelper() == null) {
       builder.idHelper(new DefaultIdHelper(BlockIdLayout.from(builder.getRssConf())));
@@ -185,12 +189,10 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
           }
         });
 
-    for (long rid : removeBlockIds) {
-      blockIdBitmap.removeLong(rid);
-    }
+    blockIdBitmap.removeAll(removeBlockIds.stream());
 
     // copy blockIdBitmap to track all pending blocks
-    pendingBlockIds = RssUtils.cloneBitMap(blockIdBitmap);
+    pendingBlockIds = blockIdBitmap.copy();
 
     clientReadHandler = ShuffleHandlerFactory.getInstance().createShuffleReadHandler(request);
   }
@@ -263,16 +265,16 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
           }
 
           // mark block as processed
-          processedBlockIds.addLong(bs.getBlockId());
-          pendingBlockIds.removeLong(bs.getBlockId());
+          processedBlockIds.add(bs.getBlockId());
+          pendingBlockIds.remove(bs.getBlockId());
           // only update the statistics of necessary blocks
           clientReadHandler.updateConsumedBlockInfo(bs, false);
           break;
         }
         clientReadHandler.updateConsumedBlockInfo(bs, true);
         // mark block as processed
-        processedBlockIds.addLong(bs.getBlockId());
-        pendingBlockIds.removeLong(bs.getBlockId());
+        processedBlockIds.add(bs.getBlockId());
+        pendingBlockIds.remove(bs.getBlockId());
       }
 
       if (bs != null) {
@@ -286,7 +288,7 @@ public class ShuffleReadClientImpl implements ShuffleReadClient {
   }
 
   @VisibleForTesting
-  protected Roaring64NavigableMap getProcessedBlockIds() {
+  protected BlockIdSet getProcessedBlockIds() {
     return processedBlockIds;
   }
 

@@ -17,13 +17,13 @@
 
 package org.apache.uniffle.server.buffer;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -81,6 +81,7 @@ public class ShuffleBufferManager {
   protected Map<String, Map<Integer, RangeMap<Integer, ShuffleBuffer>>> bufferPool;
   // appId -> shuffleId -> shuffle size in buffer
   protected Map<String, Map<Integer, AtomicLong>> shuffleSizeMap = JavaUtils.newConcurrentMap();
+  private final boolean appBlockSizeMetricEnabled;
 
   public ShuffleBufferManager(
       ShuffleServerConf conf, ShuffleFlushManager shuffleFlushManager, boolean nettyServerEnabled) {
@@ -109,7 +110,7 @@ public class ShuffleBufferManager {
         capacity,
         readCapacity);
     this.shuffleFlushManager = shuffleFlushManager;
-    this.bufferPool = new ConcurrentHashMap<>();
+    this.bufferPool = JavaUtils.newConcurrentMap();
     this.highWaterMark =
         (long)
             (capacity
@@ -130,6 +131,8 @@ public class ShuffleBufferManager {
     this.hugePartitionMemoryLimitSize =
         Math.round(
             capacity * conf.get(ShuffleServerConf.HUGE_PARTITION_MEMORY_USAGE_LIMITATION_RATIO));
+    appBlockSizeMetricEnabled =
+        conf.getBoolean(ShuffleServerConf.APP_LEVEL_SHUFFLE_BLOCK_SIZE_METRIC_ENABLED);
   }
 
   public void setShuffleTaskManager(ShuffleTaskManager taskManager) {
@@ -179,6 +182,14 @@ public class ShuffleBufferManager {
     long size = buffer.append(spd);
     if (!isPreAllocated) {
       updateUsedMemory(size);
+    }
+    if (appBlockSizeMetricEnabled) {
+      Arrays.stream(spd.getBlockList())
+          .forEach(
+              b -> {
+                int blockSize = b.getLength();
+                ShuffleServerMetrics.appHistogramWriteBlockSize.labels(appId).observe(blockSize);
+              });
     }
     updateShuffleSize(appId, shuffleId, size);
     synchronized (this) {
@@ -337,6 +348,9 @@ public class ShuffleBufferManager {
     removeBufferByShuffleId(appId, shuffleIdToBuffers.keySet());
     shuffleSizeMap.remove(appId);
     bufferPool.remove(appId);
+    if (appBlockSizeMetricEnabled) {
+      ShuffleServerMetrics.appHistogramWriteBlockSize.remove(appId);
+    }
   }
 
   public synchronized boolean requireMemory(long size, boolean isPreAllocated) {

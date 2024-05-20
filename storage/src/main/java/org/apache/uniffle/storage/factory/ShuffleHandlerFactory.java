@@ -22,13 +22,14 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import com.google.common.collect.Lists;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.api.ShuffleServerClient;
 import org.apache.uniffle.client.factory.ShuffleServerClientFactory;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.exception.RssException;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.storage.handler.api.ClientReadHandler;
 import org.apache.uniffle.storage.handler.api.ShuffleDeleteHandler;
@@ -123,8 +124,8 @@ public class ShuffleHandlerFactory {
             .getShuffleServerClient(request.getClientType().name(), ssi, request.getClientConf());
     Roaring64NavigableMap expectTaskIds = null;
     if (request.isExpectedTaskIdsBitmapFilterEnable()) {
-      Roaring64NavigableMap realExceptBlockIds = RssUtils.cloneBitMap(request.getExpectBlockIds());
-      realExceptBlockIds.xor(request.getProcessBlockIds());
+      BlockIdSet realExceptBlockIds = request.getExpectBlockIds().copy();
+      realExceptBlockIds.removeAll(request.getProcessBlockIds());
       expectTaskIds = RssUtils.generateTaskIdBitMap(realExceptBlockIds, request.getIdHelper());
     }
     ClientReadHandler memoryClientReadHandler =
@@ -185,7 +186,7 @@ public class ShuffleHandlerFactory {
   public ShuffleDeleteHandler createShuffleDeleteHandler(
       CreateShuffleDeleteHandlerRequest request) {
     if (StorageType.HDFS.name().equals(request.getStorageType())) {
-      return new HadoopShuffleDeleteHandler(request.getConf());
+      return new HadoopShuffleDeleteHandler(request.getConf(), request.getShuffleServerId());
     } else if (StorageType.LOCALFILE.name().equals(request.getStorageType())) {
       return new LocalFileDeleteHandler();
     } else {
