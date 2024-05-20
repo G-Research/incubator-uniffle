@@ -119,6 +119,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
   private Set<ShuffleServerInfo> defectiveServers;
   private RssConf rssConf;
   private BlockIdLayout blockIdLayout;
+  private volatile boolean closed = false;
 
   public ShuffleWriteClientImpl(ShuffleClientFactory.WriteClientBuilder builder) {
     // set default value
@@ -167,7 +168,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       return true;
     }
 
-    // If one or more servers is failed, the sending is not totally successful.
+    // If one or more servers failed, the sending is not totally successful.
     List<CompletableFuture<Boolean>> futures = new ArrayList<>();
     for (Map.Entry<ShuffleServerInfo, Map<Integer, Map<Integer, List<ShuffleBlockInfo>>>> entry :
         serverToBlocks.entrySet()) {
@@ -399,7 +400,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     // we do not apply complicated skipping logic, because server crash is rare in production
     // environment.
     if (!isAllSuccess && !secondaryServerToBlocks.isEmpty() && !needCancelRequest.get()) {
-      LOG.info("The sending of primary round is failed partially, so start the secondary round");
+      LOG.info("The sending of primary round failed partially, so start the secondary round");
       sendShuffleDataAsync(
           appId,
           secondaryServerToBlocks,
@@ -466,18 +467,13 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                             if (response.getStatusCode() == StatusCode.SUCCESS) {
                               int commitCount = response.getCommitCount();
                               LOG.info(
-                                  "Successfully sendCommit for appId["
-                                      + appId
-                                      + "], shuffleId["
-                                      + shuffleId
-                                      + "] to ShuffleServer["
-                                      + ssi.getId()
-                                      + "], cost "
-                                      + (System.currentTimeMillis() - startTime)
-                                      + " ms, got committed maps["
-                                      + commitCount
-                                      + "], map number of stage is "
-                                      + numMaps);
+                                  "Successfully sendCommit for appId[{}], shuffleId[{}] to ShuffleServer[{}], cost {} ms, got committed maps[{}], map number of stage is {}",
+                                  appId,
+                                  shuffleId,
+                                  ssi.getId(),
+                                  (System.currentTimeMillis() - startTime),
+                                  commitCount,
+                                  numMaps);
                               if (commitCount >= numMaps) {
                                 RssFinishShuffleResponse rfsResponse =
                                     getShuffleServerClient(ssi)
@@ -495,11 +491,9 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                                   throw new Exception(msg);
                                 } else {
                                   LOG.info(
-                                      "Successfully finish shuffle to "
-                                          + ssi
-                                          + " for shuffleId["
-                                          + shuffleId
-                                          + "]");
+                                      "Successfully finish shuffle to {} for shuffleId[{}]",
+                                      ssi,
+                                      shuffleId);
                                 }
                               }
                             } else {
@@ -651,7 +645,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       try {
         response = coordinatorClient.getShuffleAssignments(request);
       } catch (Exception e) {
-        LOG.error(e.getMessage());
+        LOG.error("Failed to get shuffle assignment via " + coordinatorClient.getDesc(), e);
       }
 
       if (response.getStatusCode() == StatusCode.SUCCESS) {
@@ -706,40 +700,31 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
             getShuffleServerClient(ssi).reportShuffleResult(request);
         if (response.getStatusCode() == StatusCode.SUCCESS) {
           LOG.info(
-              "Report shuffle result to "
-                  + ssi
-                  + " for appId["
-                  + appId
-                  + "], shuffleId["
-                  + shuffleId
-                  + "] successfully");
+              "Report shuffle result to {} for appId[{}], shuffleId[{}] successfully",
+              ssi,
+              appId,
+              shuffleId);
         } else {
           LOG.warn(
-              "Report shuffle result to "
-                  + ssi
-                  + " for appId["
-                  + appId
-                  + "], shuffleId["
-                  + shuffleId
-                  + "] failed with "
-                  + response.getStatusCode());
+              "Report shuffle result to {} for appId[{}], shuffleId[{}] failed with {}",
+              ssi,
+              appId,
+              shuffleId,
+              response.getStatusCode());
           recordFailedBlockIds(blockReportTracker, requestBlockIds);
         }
       } catch (Exception e) {
         LOG.warn(
-            "Report shuffle result is failed to "
-                + ssi
-                + " for appId["
-                + appId
-                + "], shuffleId["
-                + shuffleId
-                + "]");
+            "Report shuffle result failed to {} for appId[{}], shuffleId[{}]",
+            ssi,
+            appId,
+            shuffleId);
         recordFailedBlockIds(blockReportTracker, requestBlockIds);
       }
     }
     if (blockReportTracker.values().stream().anyMatch(cnt -> cnt < replicaWrite)) {
       throw new RssException(
-          "Quorum check of report shuffle result is failed for appId["
+          "Quorum check of report shuffle result failed for appId["
               + appId
               + "], shuffleId["
               + shuffleId
@@ -795,18 +780,15 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
         }
       } catch (Exception e) {
         LOG.warn(
-            "Get shuffle result is failed from "
-                + ssi
-                + " for appId["
-                + appId
-                + "], shuffleId["
-                + shuffleId
-                + "]");
+            "Get shuffle result failed from {} for appId[{}], shuffleId[{}]",
+            ssi,
+            appId,
+            shuffleId);
       }
     }
     if (!isSuccessful) {
       throw new RssFetchFailedException(
-          "Get shuffle result is failed for appId[" + appId + "], shuffleId[" + shuffleId + "]");
+          "Get shuffle result failed for appId[" + appId + "], shuffleId[" + shuffleId + "]");
     }
     return blockIdBitmap;
   }
@@ -848,7 +830,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       } catch (Exception e) {
         failedPartitions.addAll(requestPartitions);
         LOG.warn(
-            "Get shuffle result is failed from "
+            "Get shuffle result failed from "
                 + shuffleServerInfo
                 + " for appId["
                 + appId
@@ -865,7 +847,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     if (!isSuccessful) {
       LOG.error("Failed to meet replica requirement: {}", replicaRequirementTracking);
       throw new RssFetchFailedException(
-          "Get shuffle result is failed for appId[" + appId + "], shuffleId[" + shuffleId + "]");
+          "Get shuffle result failed for appId[" + appId + "], shuffleId[" + shuffleId + "]");
     }
     return blockIdBitmap;
   }
@@ -882,13 +864,13 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
             RssApplicationInfoResponse response =
                 coordinatorClient.registerApplicationInfo(request);
             if (response.getStatusCode() != StatusCode.SUCCESS) {
-              LOG.error("Failed to send applicationInfo to " + coordinatorClient.getDesc());
+              LOG.error("Failed to send applicationInfo to {}", coordinatorClient.getDesc());
             } else {
-              LOG.info("Successfully send applicationInfo to " + coordinatorClient.getDesc());
+              LOG.info("Successfully send applicationInfo to {}", coordinatorClient.getDesc());
             }
           } catch (Exception e) {
             LOG.warn(
-                "Error happened when send applicationInfo to " + coordinatorClient.getDesc(), e);
+                "Error happened when sending applicationInfo to " + coordinatorClient.getDesc(), e);
           }
           return null;
         },
@@ -911,10 +893,19 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                     .getShuffleServerClient(clientType, shuffleServerInfo, rssConf);
             RssAppHeartBeatResponse response = client.sendHeartBeat(request);
             if (response.getStatusCode() != StatusCode.SUCCESS) {
-              LOG.warn("Failed to send heartbeat to " + shuffleServerInfo);
+              LOG.warn("Failed to send heartbeat to {}", shuffleServerInfo);
             }
           } catch (Exception e) {
-            LOG.warn("Error happened when send heartbeat to " + shuffleServerInfo, e);
+            if (closed) {
+              // this client has been closed, so failing heartbeat calls are expected
+              LOG.info(
+                  "Error happened when sending heartbeat to "
+                      + shuffleServerInfo
+                      + " after shuffle write client has been closed",
+                  e);
+            } else {
+              LOG.warn("Error happened when sending heartbeat to " + shuffleServerInfo, e);
+            }
           }
           return null;
         },
@@ -928,12 +919,22 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
           try {
             RssAppHeartBeatResponse response = coordinatorClient.sendAppHeartBeat(request);
             if (response.getStatusCode() != StatusCode.SUCCESS) {
-              LOG.warn("Failed to send heartbeat to " + coordinatorClient.getDesc());
+              LOG.warn("Failed to send heartbeat to {}", coordinatorClient.getDesc());
             } else {
-              LOG.info("Successfully send heartbeat to " + coordinatorClient.getDesc());
+              LOG.info("Successfully send heartbeat to {}", coordinatorClient.getDesc());
             }
           } catch (Exception e) {
-            LOG.warn("Error happened when send heartbeat to " + coordinatorClient.getDesc(), e);
+            if (closed) {
+              // this client has been closed, so failing heartbeat calls are expected
+              LOG.info(
+                  "Error happened when sending heartbeat to "
+                      + coordinatorClient.getDesc()
+                      + " after shuffle write client has been closed",
+                  e);
+            } else {
+              LOG.warn(
+                  "Error happened when sending heartbeat to " + coordinatorClient.getDesc(), e);
+            }
           }
           return null;
         },
@@ -946,6 +947,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     heartBeatExecutorService.shutdownNow();
     coordinatorClients.forEach(CoordinatorClient::close);
     dataTransferPool.shutdownNow();
+    closed = true;
   }
 
   @Override
@@ -977,10 +979,19 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                       .getShuffleServerClient(clientType, shuffleServerInfo, rssConf);
               RssUnregisterShuffleResponse response = client.unregisterShuffle(request);
               if (response.getStatusCode() != StatusCode.SUCCESS) {
-                LOG.warn("Failed to unregister shuffle to " + shuffleServerInfo);
+                LOG.warn("Failed to unregister shuffle to {}", shuffleServerInfo);
               }
             } catch (Exception e) {
-              LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
+              if (closed) {
+                // this client has been closed, so failing unregister calls are expected
+                LOG.info(
+                    "Error happened when unregistering to "
+                        + shuffleServerInfo
+                        + " after shuffle write client has been closed",
+                    e);
+              } else {
+                LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
+              }
             }
             return null;
           },
@@ -1025,10 +1036,19 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
               RssUnregisterShuffleByAppIdResponse response =
                   client.unregisterShuffleByAppId(request);
               if (response.getStatusCode() != StatusCode.SUCCESS) {
-                LOG.warn("Failed to unregister shuffle to " + shuffleServerInfo);
+                LOG.warn("Failed to unregister shuffle to {}", shuffleServerInfo);
               }
             } catch (Exception e) {
-              LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
+              if (closed) {
+                // this client has been closed, so failing unregister calls are expected
+                LOG.info(
+                    "Error happened when unregistering to "
+                        + shuffleServerInfo
+                        + " after shuffle write client has been closed",
+                    e);
+              } else {
+                LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
+              }
             }
             return null;
           },
