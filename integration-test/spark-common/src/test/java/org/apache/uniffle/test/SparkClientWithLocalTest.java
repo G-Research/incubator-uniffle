@@ -18,6 +18,7 @@
 package org.apache.uniffle.test;
 
 import java.io.File;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -32,7 +33,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.roaringbitmap.longlong.LongIterator;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
@@ -47,12 +47,10 @@ import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.PartitionRange;
 import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
-import org.apache.uniffle.common.config.RssClientConf;
-import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.rpc.ServerType;
 import org.apache.uniffle.common.util.BlockId;
 import org.apache.uniffle.common.util.BlockIdLayout;
-import org.apache.uniffle.common.util.RssUtils;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.server.ShuffleServerConf;
 import org.apache.uniffle.storage.util.StorageType;
@@ -111,11 +109,8 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     grpcShuffleServerClient =
         new ShuffleServerGrpcClient(
             LOCALHOST, grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT));
-    RssConf rssConf = new RssConf();
-    rssConf.set(RssClientConf.RSS_CLIENT_TYPE, ClientType.GRPC_NETTY);
     nettyShuffleServerClient =
         new ShuffleServerGrpcNettyClient(
-            rssConf,
             LOCALHOST,
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT),
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.NETTY_SERVER_PORT));
@@ -140,6 +135,7 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
                     LOCALHOST,
                     grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT)));
     return ShuffleClientFactory.newReadBuilder()
+        .clientType(isNettyMode ? ClientType.GRPC_NETTY : ClientType.GRPC)
         .storageType(StorageType.LOCALFILE.name())
         .shuffleId(0)
         .partitionId(0)
@@ -160,11 +156,11 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest1";
     BlockIdLayout layout = BlockIdLayout.DEFAULT;
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     createTestData(testAppId, expectedData, blockIdBitmap, taskIdBitmap, isNettyMode);
-    blockIdBitmap.addLong(layout.getBlockId(0, 1, 0));
+    blockIdBitmap.add(layout.asBlockId(0, 1, 0));
     ShuffleReadClientImpl readClient;
     readClient =
         baseReadBuilder(isNettyMode)
@@ -190,8 +186,8 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest2";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     List<ShuffleBlockInfo> blocks =
         createShuffleBlockList(0, 0, 0, 2, 30, blockIdBitmap, expectedData, mockSSI);
@@ -217,8 +213,8 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest3";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     List<ShuffleBlockInfo> blocks =
         createShuffleBlockList(0, 0, 0, 2, 30, blockIdBitmap, expectedData, mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
@@ -254,15 +250,15 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest4";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 1)), isNettyMode);
 
-    Map<Long, byte[]> expectedData1 = Maps.newHashMap();
-    Map<Long, byte[]> expectedData2 = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap1 = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData1 = Maps.newHashMap();
+    Map<BlockId, byte[]> expectedData2 = Maps.newHashMap();
+    BlockIdSet blockIdBitmap1 = BlockIdSet.empty();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     List<ShuffleBlockInfo> blocks =
         createShuffleBlockList(0, 0, 0, 10, 30, blockIdBitmap1, expectedData1, mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
 
-    Roaring64NavigableMap blockIdBitmap2 = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet blockIdBitmap2 = BlockIdSet.empty();
     blocks = createShuffleBlockList(0, 1, 0, 10, 30, blockIdBitmap2, expectedData2, mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
 
@@ -302,7 +298,7 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
             .appId(testAppId)
             .partitionId(1)
             .partitionNumPerRange(2)
-            .blockIdBitmap(Roaring64NavigableMap.bitmapOf())
+            .blockIdBitmap(BlockIdSet.empty())
             .taskIdBitmap(Roaring64NavigableMap.bitmapOf())
             .build();
     assertNull(readClient.readShuffleBlockData());
@@ -316,19 +312,20 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     BlockIdLayout layout = BlockIdLayout.DEFAULT;
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
     List<ShuffleBlockInfo> blocks =
         createShuffleBlockList(0, 0, 0, 5, 30, blockIdBitmap, expectedData, mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
 
-    Roaring64NavigableMap wrongBlockIdBitmap = Roaring64NavigableMap.bitmapOf();
-    LongIterator iter = blockIdBitmap.getLongIterator();
+    BlockIdSet wrongBlockIdBitmap = BlockIdSet.empty();
+    Iterator<BlockId> iter = blockIdBitmap.stream().iterator();
     while (iter.hasNext()) {
-      BlockId blockId = layout.asBlockId(iter.next());
-      wrongBlockIdBitmap.addLong(
-          layout.getBlockId(blockId.sequenceNo, blockId.partitionId + 1, blockId.taskAttemptId));
+      BlockId blockId = iter.next().withLayoutIfOpaque(layout);
+      wrongBlockIdBitmap.add(
+          layout.asBlockId(
+              blockId.getSequenceNo(), blockId.getPartitionId() + 1, blockId.getTaskAttemptId()));
     }
 
     ShuffleReadClientImpl readClient =
@@ -352,8 +349,8 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest7";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0, 1);
 
     List<ShuffleBlockInfo> blocks =
@@ -385,25 +382,21 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest8";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0, 3);
     List<ShuffleBlockInfo> blocks =
         createShuffleBlockList(0, 0, 0, 5, 30, blockIdBitmap, expectedData, mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
 
     // test case: data generated by speculation task without report result
-    blocks =
-        createShuffleBlockList(
-            0, 0, 1, 5, 30, Roaring64NavigableMap.bitmapOf(), Maps.newHashMap(), mockSSI);
+    blocks = createShuffleBlockList(0, 0, 1, 5, 30, BlockIdSet.empty(), Maps.newHashMap(), mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
     // test case: data generated by speculation task with report result
     blocks = createShuffleBlockList(0, 0, 2, 5, 30, blockIdBitmap, Maps.newHashMap(), mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
 
-    blocks =
-        createShuffleBlockList(
-            0, 0, 3, 5, 30, Roaring64NavigableMap.bitmapOf(), Maps.newHashMap(), mockSSI);
+    blocks = createShuffleBlockList(0, 0, 3, 5, 30, BlockIdSet.empty(), Maps.newHashMap(), mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
 
     // unexpected taskAttemptId should be filtered
@@ -424,14 +417,14 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
   public void readTest9(boolean isNettyMode) throws Exception {
     String testAppId = "localReadTest9";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
     Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0);
 
     List<ShuffleBlockInfo> blocks;
 
     createTestData(testAppId, expectedData, blockIdBitmap, taskIdBitmap, isNettyMode);
-    Roaring64NavigableMap beforeAdded = RssUtils.cloneBitMap(blockIdBitmap);
+    BlockIdSet beforeAdded = blockIdBitmap.copy();
     // write data by another task, read data again, the cache for index file should be updated
     blocks = createShuffleBlockList(0, 0, 1, 3, 25, blockIdBitmap, Maps.newHashMap(), mockSSI);
     sendTestData(testAppId, blocks, isNettyMode);
@@ -470,9 +463,9 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
     String testAppId = "localReadTest10";
     registerApp(testAppId, Lists.newArrayList(new PartitionRange(0, 0)), isNettyMode);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap expectedBlockIds = Roaring64NavigableMap.bitmapOf();
-    Roaring64NavigableMap unexpectedBlockIds = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet expectedBlockIds = BlockIdSet.empty();
+    BlockIdSet unexpectedBlockIds = BlockIdSet.empty();
     final Roaring64NavigableMap taskIdBitmap = Roaring64NavigableMap.bitmapOf(0, 1);
     // send some expected data
     List<ShuffleBlockInfo> blocks =
@@ -531,8 +524,8 @@ public class SparkClientWithLocalTest extends ShuffleReadWriteBase {
 
   private void createTestData(
       String testAppId,
-      Map<Long, byte[]> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      Map<BlockId, byte[]> expectedData,
+      BlockIdSet blockIdBitmap,
       Roaring64NavigableMap taskIdBitmap,
       boolean isNettyMode) {
     List<ShuffleBlockInfo> blocks =

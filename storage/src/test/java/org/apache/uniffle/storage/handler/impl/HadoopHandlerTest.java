@@ -28,11 +28,13 @@ import com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Test;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.BufferSegment;
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.ShufflePartitionedBlock;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.BlockIdSet;
+import org.apache.uniffle.common.util.OpaqueBlockId;
 import org.apache.uniffle.storage.HadoopTestBase;
 import org.apache.uniffle.storage.common.FileBasedShuffleSegment;
 
@@ -54,7 +56,7 @@ public class HadoopHandlerTest extends HadoopTestBase {
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 1, 1, 1, basePath, "test", conf);
     List<ShufflePartitionedBlock> blocks = new LinkedList<>();
-    List<Long> expectedBlockId = new LinkedList<>();
+    List<BlockId> expectedBlockId = new LinkedList<>();
     List<byte[]> expectedData = new LinkedList<>();
     List<FileBasedShuffleSegment> expectedIndex = new LinkedList<>();
 
@@ -63,9 +65,10 @@ public class HadoopHandlerTest extends HadoopTestBase {
       byte[] buf = new byte[i * 8];
       new Random().nextBytes(buf);
       expectedData.add(buf);
-      blocks.add(new ShufflePartitionedBlock(i * 8, i * 8, i, i, 0, buf));
-      expectedBlockId.add(Long.valueOf(i));
-      expectedIndex.add(new FileBasedShuffleSegment(i, pos, i * 8, i * 8, i, 0));
+      blocks.add(new ShufflePartitionedBlock(i * 8, i * 8, i, new OpaqueBlockId(i), 0, buf));
+      BlockId blockId = new OpaqueBlockId(i);
+      expectedBlockId.add(blockId);
+      expectedIndex.add(new FileBasedShuffleSegment(blockId, pos, i * 8, i * 8, i, 0));
       pos += i * 8;
     }
     writeHandler.write(blocks);
@@ -78,9 +81,10 @@ public class HadoopHandlerTest extends HadoopTestBase {
       byte[] buf = new byte[i * 8];
       new Random().nextBytes(buf);
       expectedData.add(buf);
-      expectedBlockId.add(Long.valueOf(i));
-      blocksAppend.add(new ShufflePartitionedBlock(i * 8, i * 8, i, i, i, buf));
-      expectedIndex.add(new FileBasedShuffleSegment(i, pos, i * 8, i * 8, i, i));
+      BlockId blockId = new OpaqueBlockId(i);
+      expectedBlockId.add(blockId);
+      blocksAppend.add(new ShufflePartitionedBlock(i * 8, i * 8, i, new OpaqueBlockId(i), i, buf));
+      expectedIndex.add(new FileBasedShuffleSegment(blockId, pos, i * 8, i * 8, i, i));
       pos += i * 8;
     }
     writeHandler = new HadoopShuffleWriteHandler("appId", 1, 1, 1, basePath, "test", conf);
@@ -95,12 +99,12 @@ public class HadoopHandlerTest extends HadoopTestBase {
       int partitionId,
       String basePath,
       List<byte[]> expectedData,
-      List<Long> expectedBlockId)
+      List<BlockId> expectedBlockId)
       throws IllegalStateException {
-    Roaring64NavigableMap expectBlockIds = Roaring64NavigableMap.bitmapOf();
-    Roaring64NavigableMap processBlockIds = Roaring64NavigableMap.bitmapOf();
-    for (long blockId : expectedBlockId) {
-      expectBlockIds.addLong(blockId);
+    BlockIdSet expectBlockIds = BlockIdSet.empty();
+    BlockIdSet processBlockIds = BlockIdSet.empty();
+    for (BlockId blockId : expectedBlockId) {
+      expectBlockIds.add(blockId);
     }
     // read directly and compare
     HadoopClientReadHandler readHandler =
@@ -124,7 +128,7 @@ public class HadoopHandlerTest extends HadoopTestBase {
     }
   }
 
-  private List<ByteBuffer> readData(HadoopClientReadHandler handler, Set<Long> blockIds)
+  private List<ByteBuffer> readData(HadoopClientReadHandler handler, Set<BlockId> blockIds)
       throws IllegalStateException {
     ShuffleDataResult sdr = handler.readShuffleData();
     List<BufferSegment> bufferSegments = sdr.getBufferSegments();

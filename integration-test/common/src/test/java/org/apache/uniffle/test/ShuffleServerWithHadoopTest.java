@@ -46,10 +46,10 @@ import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.PartitionRange;
 import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleServerInfo;
-import org.apache.uniffle.common.config.RssClientConf;
-import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.rpc.ServerType;
 import org.apache.uniffle.common.rpc.StatusCode;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.server.ShuffleServer;
 import org.apache.uniffle.server.ShuffleServerConf;
@@ -93,11 +93,8 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
     grpcShuffleServerClient =
         new ShuffleServerGrpcClient(
             LOCALHOST, grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT));
-    RssConf rssConf = new RssConf();
-    rssConf.set(RssClientConf.RSS_CLIENT_TYPE, ClientType.GRPC_NETTY);
     nettyShuffleServerClient =
         new ShuffleServerGrpcNettyClient(
-            rssConf,
             LOCALHOST,
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT),
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.NETTY_SERVER_PORT));
@@ -109,8 +106,9 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
     nettyShuffleServerClient.close();
   }
 
-  private ShuffleClientFactory.ReadClientBuilder baseReadBuilder() {
+  private ShuffleClientFactory.ReadClientBuilder baseReadBuilder(boolean isNettyMode) {
     return ShuffleClientFactory.newReadBuilder()
+        .clientType(isNettyMode ? ClientType.GRPC_NETTY : ClientType.GRPC)
         .storageType(StorageType.HDFS.name())
         .shuffleId(0)
         .partitionId(0)
@@ -141,8 +139,8 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
             appId, 0, Lists.newArrayList(new PartitionRange(2, 3)), dataBasePath);
     shuffleServerClient.registerShuffle(rrsr);
 
-    Roaring64NavigableMap[] bitmaps = new Roaring64NavigableMap[4];
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet[] bitmaps = new BlockIdSet[4];
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
     Map<Integer, List<ShuffleBlockInfo>> dataBlocks = createTestData(bitmaps, expectedData);
     Map<Integer, List<ShuffleBlockInfo>> partitionToBlocks = Maps.newHashMap();
     partitionToBlocks.put(0, dataBlocks.get(0));
@@ -172,7 +170,7 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
                 LOCALHOST, grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT));
 
     ShuffleReadClientImpl readClient =
-        baseReadBuilder()
+        baseReadBuilder(isNettyMode)
             .appId(appId)
             .basePath(dataBasePath)
             .blockIdBitmap(bitmaps[0])
@@ -208,7 +206,7 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
     shuffleServerClient.finishShuffle(rfsr);
 
     readClient =
-        baseReadBuilder()
+        baseReadBuilder(isNettyMode)
             .appId(appId)
             .basePath(dataBasePath)
             .blockIdBitmap(bitmaps[0])
@@ -218,7 +216,7 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
     validateResult(readClient, expectedData, bitmaps[0]);
 
     readClient =
-        baseReadBuilder()
+        baseReadBuilder(isNettyMode)
             .appId(appId)
             .partitionId(1)
             .basePath(dataBasePath)
@@ -229,7 +227,7 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
     validateResult(readClient, expectedData, bitmaps[1]);
 
     readClient =
-        baseReadBuilder()
+        baseReadBuilder(isNettyMode)
             .appId(appId)
             .partitionId(2)
             .basePath(dataBasePath)
@@ -240,7 +238,7 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
     validateResult(readClient, expectedData, bitmaps[2]);
 
     readClient =
-        baseReadBuilder()
+        baseReadBuilder(isNettyMode)
             .appId(appId)
             .partitionId(3)
             .basePath(dataBasePath)
@@ -253,14 +251,14 @@ public class ShuffleServerWithHadoopTest extends ShuffleReadWriteBase {
 
   protected void validateResult(
       ShuffleReadClientImpl readClient,
-      Map<Long, byte[]> expectedData,
-      Roaring64NavigableMap blockIdBitmap) {
+      Map<BlockId, byte[]> expectedData,
+      BlockIdSet blockIdBitmap) {
     CompressedShuffleBlock csb = readClient.readShuffleBlockData();
-    Roaring64NavigableMap matched = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet matched = BlockIdSet.empty();
     while (csb != null && csb.getByteBuffer() != null) {
-      for (Entry<Long, byte[]> entry : expectedData.entrySet()) {
+      for (Entry<BlockId, byte[]> entry : expectedData.entrySet()) {
         if (compareByte(entry.getValue(), csb.getByteBuffer())) {
-          matched.addLong(entry.getKey());
+          matched.add(entry.getKey());
           break;
         }
       }

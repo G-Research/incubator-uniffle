@@ -26,7 +26,7 @@ import com.google.common.collect.Lists;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +53,7 @@ import org.apache.uniffle.common.netty.protocol.RequestMessage;
 import org.apache.uniffle.common.netty.protocol.RpcResponse;
 import org.apache.uniffle.common.netty.protocol.SendShuffleDataRequest;
 import org.apache.uniffle.common.rpc.StatusCode;
+import org.apache.uniffle.common.util.OpaqueBlockId;
 import org.apache.uniffle.server.ShuffleDataReadEvent;
 import org.apache.uniffle.server.ShuffleServer;
 import org.apache.uniffle.server.ShuffleServerConf;
@@ -274,7 +275,7 @@ public class ShuffleServerNettyHandler implements BaseMessageHandler {
                     appId,
                     shuffleId,
                     partitionId,
-                    blockId,
+                    new OpaqueBlockId(blockId),
                     readBufferSize,
                     req.getExpectedTaskIdsBitmap());
         ManagedBuffer data = NettyManagedBuffer.EMPTY_BUFFER;

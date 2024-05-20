@@ -19,6 +19,12 @@ package org.apache.uniffle.client.request;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import com.google.common.collect.Lists;
+
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.proto.RssProtos;
 
 public class RssReportShuffleResultRequest {
 
@@ -26,13 +32,13 @@ public class RssReportShuffleResultRequest {
   private int shuffleId;
   private long taskAttemptId;
   private int bitmapNum;
-  private Map<Integer, List<Long>> partitionToBlockIds;
+  private Map<Integer, List<BlockId>> partitionToBlockIds;
 
   public RssReportShuffleResultRequest(
       String appId,
       int shuffleId,
       long taskAttemptId,
-      Map<Integer, List<Long>> partitionToBlockIds,
+      Map<Integer, List<BlockId>> partitionToBlockIds,
       int bitmapNum) {
     this.appId = appId;
     this.shuffleId = shuffleId;
@@ -57,7 +63,32 @@ public class RssReportShuffleResultRequest {
     return bitmapNum;
   }
 
-  public Map<Integer, List<Long>> getPartitionToBlockIds() {
+  public Map<Integer, List<BlockId>> getPartitionToBlockIds() {
     return partitionToBlockIds;
+  }
+
+  public RssProtos.ReportShuffleResultRequest toProto() {
+    RssReportShuffleResultRequest request = this;
+    List<RssProtos.PartitionToBlockIds> partitionToBlockIds = Lists.newArrayList();
+    for (Map.Entry<Integer, List<BlockId>> entry : request.getPartitionToBlockIds().entrySet()) {
+      List<BlockId> blockIds = entry.getValue();
+      if (blockIds != null && !blockIds.isEmpty()) {
+        partitionToBlockIds.add(
+            RssProtos.PartitionToBlockIds.newBuilder()
+                .setPartitionId(entry.getKey())
+                .addAllBlockIds(blockIds.stream().map(BlockId::getBlockId).collect(Collectors.toList()))
+                .build());
+      }
+    }
+
+    RssProtos.ReportShuffleResultRequest rpcRequest =
+        RssProtos.ReportShuffleResultRequest.newBuilder()
+            .setAppId(request.getAppId())
+            .setShuffleId(request.getShuffleId())
+            .setTaskAttemptId(request.getTaskAttemptId())
+            .setBitmapNum(request.getBitmapNum())
+            .addAllPartitionToBlockIds(partitionToBlockIds)
+            .build();
+    return rpcRequest;
   }
 }

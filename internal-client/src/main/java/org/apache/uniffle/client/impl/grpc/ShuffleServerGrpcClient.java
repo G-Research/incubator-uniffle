@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
@@ -73,6 +74,8 @@ import org.apache.uniffle.common.exception.RssException;
 import org.apache.uniffle.common.exception.RssFetchFailedException;
 import org.apache.uniffle.common.netty.buffer.NettyManagedBuffer;
 import org.apache.uniffle.common.rpc.StatusCode;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.OpaqueBlockId;
 import org.apache.uniffle.common.util.RetryUtils;
 import org.apache.uniffle.common.util.RssUtils;
 import org.apache.uniffle.proto.RssProtos;
@@ -234,6 +237,7 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
         appId, 0, Collections.emptyList(), requireSize, retryMax, retryIntervalMax);
   }
 
+  @VisibleForTesting
   public long requirePreAllocation(
       String appId,
       int shuffleId,
@@ -241,6 +245,24 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
       int requireSize,
       int retryMax,
       long retryIntervalMax) {
+    return requirePreAllocation(
+        appId,
+        shuffleId,
+        partitionIds,
+        requireSize,
+        retryMax,
+        retryIntervalMax,
+        new AtomicReference<>(StatusCode.INTERNAL_ERROR));
+  }
+
+  public long requirePreAllocation(
+      String appId,
+      int shuffleId,
+      List<Integer> partitionIds,
+      int requireSize,
+      int retryMax,
+      long retryIntervalMax,
+      AtomicReference<StatusCode> failedStatusCodeRef) {
     RequireBufferRequest rpcRequest =
         RequireBufferRequest.newBuilder()
             .setShuffleId(shuffleId)
@@ -275,6 +297,7 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
           && rpcResponse.getStatus() != RssProtos.StatusCode.NO_BUFFER_FOR_HUGE_PARTITION) {
         break;
       }
+      failedStatusCodeRef.set(StatusCode.fromCode(rpcResponse.getStatus().getNumber()));
       if (retry >= retryMax) {
         LOG.warn(
             "ShuffleServer "
@@ -462,7 +485,7 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
         for (ShuffleBlockInfo sbi : ptb.getValue()) {
           shuffleBlocks.add(
               ShuffleBlock.newBuilder()
-                  .setBlockId(sbi.getBlockId())
+                  .setBlockId(sbi.getBlockId().getBlockId())
                   .setCrc(sbi.getCrc())
                   .setLength(sbi.getLength())
                   .setTaskAttemptId(sbi.getTaskAttemptId())
@@ -492,7 +515,8 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
                       partitionIds,
                       allocateSize,
                       request.getRetryMax() / maxRetryAttempts,
-                      request.getRetryIntervalMax());
+                      request.getRetryIntervalMax(),
+                      failedStatusCode);
               if (requireId == FAILED_REQUIRE_ID) {
                 throw new RssException(
                     String.format(
@@ -656,13 +680,14 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
   @Override
   public RssReportShuffleResultResponse reportShuffleResult(RssReportShuffleResultRequest request) {
     List<PartitionToBlockIds> partitionToBlockIds = Lists.newArrayList();
-    for (Map.Entry<Integer, List<Long>> entry : request.getPartitionToBlockIds().entrySet()) {
-      List<Long> blockIds = entry.getValue();
+    for (Map.Entry<Integer, List<BlockId>> entry : request.getPartitionToBlockIds().entrySet()) {
+      List<BlockId> blockIds = entry.getValue();
       if (blockIds != null && !blockIds.isEmpty()) {
         partitionToBlockIds.add(
             PartitionToBlockIds.newBuilder()
                 .setPartitionId(entry.getKey())
-                .addAllBlockIds(entry.getValue())
+                .addAllBlockIds(
+                    entry.getValue().stream().map(BlockId::getBlockId).collect(Collectors.toList()))
                 .build());
       }
     }
@@ -1086,7 +1111,7 @@ public class ShuffleServerGrpcClient extends GrpcClient implements ShuffleServer
     for (ShuffleDataBlockSegment sdbs : blockSegments) {
       ret.add(
           new BufferSegment(
-              sdbs.getBlockId(),
+              new OpaqueBlockId(sdbs.getBlockId()),
               sdbs.getOffset(),
               sdbs.getLength(),
               sdbs.getUncompressLength(),

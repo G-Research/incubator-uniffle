@@ -35,7 +35,7 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.shuffle.RssSparkConfig;
 import org.apache.spark.shuffle.RssSparkShuffleUtils;
-import org.apache.spark.shuffle.ShuffleHandleInfo;
+import org.apache.spark.shuffle.handle.ShuffleHandleInfo;
 import org.apache.spark.sql.SparkSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,7 +43,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.client.api.ShuffleWriteClient;
 import org.apache.uniffle.client.factory.ShuffleClientFactory;
@@ -55,6 +54,7 @@ import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.rpc.ServerType;
 import org.apache.uniffle.common.util.BlockId;
 import org.apache.uniffle.common.util.BlockIdLayout;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.shuffle.manager.RssShuffleManagerBase;
 import org.apache.uniffle.storage.util.StorageType;
@@ -141,16 +141,16 @@ public class RssShuffleManagerTest extends SparkIntegrationTestBase {
       BlockIdLayout clientConfLayout,
       BlockIdLayout dynamicConfLayout,
       BlockIdLayout expectedLayout,
-      boolean enableDynamicCLientConf)
+      boolean enableDynamicClientConf)
       throws Exception {
     Map<String, String> dynamicConf = startServers(dynamicConfLayout);
 
     SparkConf conf = createSparkConf();
-    updateSparkConfWithRss(conf);
+    updateSparkConfWithRssGrpc(conf);
     // enable stage recompute
     conf.set("spark." + RssClientConfig.RSS_RESUBMIT_STAGE, "true");
     // enable dynamic client conf
-    conf.set(RssSparkConfig.RSS_DYNAMIC_CLIENT_CONF_ENABLED, enableDynamicCLientConf);
+    conf.set(RssSparkConfig.RSS_DYNAMIC_CLIENT_CONF_ENABLED, enableDynamicClientConf);
     // configure storage type
     conf.set("spark." + RssClientConfig.RSS_STORAGE_TYPE, StorageType.MEMORY_LOCALFILE.name());
     // restarting the coordinator may cause RssException: There isn't enough shuffle servers
@@ -220,19 +220,15 @@ public class RssShuffleManagerTest extends SparkIntegrationTestBase {
               .build();
       ShuffleHandleInfo handle = shuffleManager.getShuffleHandleInfoByShuffleId(0);
       Set<ShuffleServerInfo> servers =
-          handle.getPartitionToServers().values().stream()
+          handle.getAvailablePartitionServersForWriter().values().stream()
               .flatMap(Collection::stream)
               .collect(Collectors.toSet());
 
       for (int partitionId : new int[] {0, 1}) {
-        Roaring64NavigableMap blockIdLongs =
+        BlockIdSet blockIdLongs =
             shuffleWriteClient.getShuffleResult(
                 ClientType.GRPC.name(), servers, shuffleManager.getAppId(), 0, partitionId);
-        List<BlockId> blockIds =
-            blockIdLongs.stream()
-                .sorted()
-                .mapToObj(expectedLayout::asBlockId)
-                .collect(Collectors.toList());
+        List<BlockId> blockIds = blockIdLongs.stream().sorted().collect(Collectors.toList());
         assertEquals(2, blockIds.size());
         long taskAttemptId0 = shuffleManager.getTaskAttemptIdForBlockId(0, 0);
         long taskAttemptId1 = shuffleManager.getTaskAttemptIdForBlockId(1, 0);

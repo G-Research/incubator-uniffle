@@ -19,10 +19,9 @@ package org.apache.spark.shuffle.writer;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -51,6 +50,7 @@ import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.compression.Codec;
 import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.exception.RssException;
+import org.apache.uniffle.common.util.BlockId;
 import org.apache.uniffle.common.util.BlockIdLayout;
 import org.apache.uniffle.common.util.ChecksumUtils;
 
@@ -67,6 +67,8 @@ public class WriteBufferManager extends MemoryConsumer {
   private AtomicLong inSendListBytes = new AtomicLong(0);
   /** An atomic counter used to keep track of the number of records */
   private AtomicLong recordCounter = new AtomicLong(0);
+  /** An atomic counter used to keep track of the number of blocks */
+  private AtomicLong blockCounter = new AtomicLong(0);
   // it's part of blockId
   private Map<Integer, Integer> partitionToSeqNo = Maps.newHashMap();
   private long askExecutorMemory;
@@ -77,7 +79,6 @@ public class WriteBufferManager extends MemoryConsumer {
   private ShuffleWriteMetrics shuffleWriteMetrics;
   // cache partition -> records
   private Map<Integer, WriterBuffer> buffers;
-  private Map<Integer, List<ShuffleServerInfo>> partitionToServers;
   private int serializerBufferSize;
   private int bufferSegmentSize;
   private long copyTime = 0;
@@ -98,6 +99,8 @@ public class WriteBufferManager extends MemoryConsumer {
   private int memorySpillTimeoutSec;
   private boolean isRowBased;
   private BlockIdLayout blockIdLayout;
+  private double bufferSpillRatio;
+  private Function<Integer, List<ShuffleServerInfo>> partitionAssignmentRetrieveFunc;
 
   public WriteBufferManager(
       int shuffleId,
@@ -127,11 +130,11 @@ public class WriteBufferManager extends MemoryConsumer {
       long taskAttemptId,
       BufferManagerOptions bufferManagerOptions,
       Serializer serializer,
-      Map<Integer, List<ShuffleServerInfo>> partitionToServers,
       TaskMemoryManager taskMemoryManager,
       ShuffleWriteMetrics shuffleWriteMetrics,
       RssConf rssConf,
-      Function<List<ShuffleBlockInfo>, List<CompletableFuture<Long>>> spillFunc) {
+      Function<List<ShuffleBlockInfo>, List<CompletableFuture<Long>>> spillFunc,
+      Function<Integer, List<ShuffleServerInfo>> partitionAssignmentRetrieveFunc) {
     super(taskMemoryManager, taskMemoryManager.pageSizeBytes(), MemoryMode.ON_HEAP);
     this.bufferSize = bufferManagerOptions.getBufferSize();
     this.spillSize = bufferManagerOptions.getBufferSpillThreshold();
@@ -139,7 +142,6 @@ public class WriteBufferManager extends MemoryConsumer {
     this.shuffleId = shuffleId;
     this.taskId = taskId;
     this.taskAttemptId = taskAttemptId;
-    this.partitionToServers = partitionToServers;
     this.shuffleWriteMetrics = shuffleWriteMetrics;
     this.serializerBufferSize = bufferManagerOptions.getSerializerBufferSize();
     this.bufferSegmentSize = bufferManagerOptions.getBufferSegmentSize();
@@ -163,7 +165,33 @@ public class WriteBufferManager extends MemoryConsumer {
     this.sendSizeLimit = rssConf.get(RssSparkConfig.RSS_CLIENT_SEND_SIZE_LIMITATION);
     this.memorySpillTimeoutSec = rssConf.get(RssSparkConfig.RSS_MEMORY_SPILL_TIMEOUT);
     this.memorySpillEnabled = rssConf.get(RssSparkConfig.RSS_MEMORY_SPILL_ENABLED);
+    this.bufferSpillRatio = rssConf.get(RssSparkConfig.RSS_MEMORY_SPILL_RATIO);
     this.blockIdLayout = BlockIdLayout.from(rssConf);
+    this.partitionAssignmentRetrieveFunc = partitionAssignmentRetrieveFunc;
+  }
+
+  public WriteBufferManager(
+      int shuffleId,
+      String taskId,
+      long taskAttemptId,
+      BufferManagerOptions bufferManagerOptions,
+      Serializer serializer,
+      Map<Integer, List<ShuffleServerInfo>> partitionToServers,
+      TaskMemoryManager taskMemoryManager,
+      ShuffleWriteMetrics shuffleWriteMetrics,
+      RssConf rssConf,
+      Function<List<ShuffleBlockInfo>, List<CompletableFuture<Long>>> spillFunc) {
+    this(
+        shuffleId,
+        taskId,
+        taskAttemptId,
+        bufferManagerOptions,
+        serializer,
+        taskMemoryManager,
+        shuffleWriteMetrics,
+        rssConf,
+        spillFunc,
+        partitionId -> partitionToServers.get(partitionId));
   }
 
   /** add serialized columnar data directly when integrate with gluten */
@@ -179,7 +207,13 @@ public class WriteBufferManager extends MemoryConsumer {
 
     // check buffer size > spill threshold
     if (usedBytes.get() - inSendListBytes.get() > spillSize) {
-      List<ShuffleBlockInfo> multiSendingBlocks = clear();
+      LOG.info(
+          "ShuffleBufferManager spill for buffer size exceeding spill threshold, "
+              + "usedBytes[{}], inSendListBytes[{}], spill size threshold[{}]",
+          usedBytes.get(),
+          inSendListBytes.get(),
+          spillSize);
+      List<ShuffleBlockInfo> multiSendingBlocks = clear(bufferSpillRatio);
       multiSendingBlocks.addAll(singleOrEmptySendingBlocks);
       writeTime += System.currentTimeMillis() - start;
       return multiSendingBlocks;
@@ -292,20 +326,34 @@ public class WriteBufferManager extends MemoryConsumer {
   }
 
   // transform all [partition, records] to [partition, ShuffleBlockInfo] and clear cache
-  public synchronized List<ShuffleBlockInfo> clear() {
+  public synchronized List<ShuffleBlockInfo> clear(double bufferSpillRatio) {
     List<ShuffleBlockInfo> result = Lists.newArrayList();
     long dataSize = 0;
     long memoryUsed = 0;
-    Iterator<Entry<Integer, WriterBuffer>> iterator = buffers.entrySet().iterator();
-    while (iterator.hasNext()) {
-      Entry<Integer, WriterBuffer> entry = iterator.next();
-      WriterBuffer wb = entry.getValue();
+    bufferSpillRatio = Math.max(0.1, Math.min(1.0, bufferSpillRatio));
+    List<Integer> partitionList = new ArrayList(buffers.keySet());
+    if (Double.compare(bufferSpillRatio, 1.0) < 0) {
+      partitionList.sort(
+          Comparator.comparingInt(o -> buffers.get(o) == null ? 0 : buffers.get(o).getMemoryUsed())
+              .reversed());
+    }
+    long targetSpillSize = (long) ((usedBytes.get() - inSendListBytes.get()) * bufferSpillRatio);
+    for (int partitionId : partitionList) {
+      WriterBuffer wb = buffers.get(partitionId);
+      if (wb == null) {
+        LOG.warn("get partition buffer failed,this should not happen!");
+        continue;
+      }
       dataSize += wb.getDataLength();
       memoryUsed += wb.getMemoryUsed();
-      result.add(createShuffleBlock(entry.getKey(), wb));
+      result.add(createShuffleBlock(partitionId, wb));
       recordCounter.addAndGet(wb.getRecordCount());
-      iterator.remove();
       copyTime += wb.getCopyTime();
+      buffers.remove(partitionId);
+      // got enough buffer to spill
+      if (memoryUsed >= targetSpillSize) {
+        break;
+      }
     }
     LOG.info(
         "Flush total buffer for shuffleId["
@@ -316,6 +364,10 @@ public class WriteBufferManager extends MemoryConsumer {
             + dataSize
             + "], memoryUsed["
             + memoryUsed
+            + "], number of blocks["
+            + result.size()
+            + "], flush ratio["
+            + bufferSpillRatio
             + "]");
     return result;
   }
@@ -331,8 +383,9 @@ public class WriteBufferManager extends MemoryConsumer {
       compressTime += System.currentTimeMillis() - start;
     }
     final long crc32 = ChecksumUtils.getCrc32(compressed);
-    final long blockId =
-        blockIdLayout.getBlockId(getNextSeqNo(partitionId), partitionId, taskAttemptId);
+    final BlockId blockId =
+        blockIdLayout.asBlockId(getNextSeqNo(partitionId), partitionId, taskAttemptId);
+    blockCounter.incrementAndGet();
     uncompressedDataLen += data.length;
     shuffleWriteMetrics.incBytesWritten(compressed.length);
     // add memory to indicate bytes which will be sent to shuffle server
@@ -344,7 +397,7 @@ public class WriteBufferManager extends MemoryConsumer {
         compressed.length,
         crc32,
         compressed,
-        partitionToServers.get(partitionId),
+        partitionAssignmentRetrieveFunc.apply(partitionId),
         uncompressLength,
         wb.getMemoryUsed(),
         taskAttemptId);
@@ -458,7 +511,7 @@ public class WriteBufferManager extends MemoryConsumer {
       return 0L;
     }
 
-    List<CompletableFuture<Long>> futures = spillFunc.apply(clear());
+    List<CompletableFuture<Long>> futures = spillFunc.apply(clear(bufferSpillRatio));
     CompletableFuture<Void> allOfFutures =
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()]));
     try {
@@ -505,6 +558,10 @@ public class WriteBufferManager extends MemoryConsumer {
 
   protected long getRecordCount() {
     return recordCounter.get();
+  }
+
+  public long getBlockCount() {
+    return blockCounter.get();
   }
 
   public void freeAllocatedMemory(long freeMemory) {
@@ -572,5 +629,10 @@ public class WriteBufferManager extends MemoryConsumer {
   @VisibleForTesting
   public void setSendSizeLimit(long sendSizeLimit) {
     this.sendSizeLimit = sendSizeLimit;
+  }
+
+  public void setPartitionAssignmentRetrieveFunc(
+      Function<Integer, List<ShuffleServerInfo>> partitionAssignmentRetrieveFunc) {
+    this.partitionAssignmentRetrieveFunc = partitionAssignmentRetrieveFunc;
   }
 }

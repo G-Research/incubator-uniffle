@@ -45,15 +45,17 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.BufferSegment;
 import org.apache.uniffle.common.RemoteStorageInfo;
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.ShufflePartitionedBlock;
 import org.apache.uniffle.common.config.RssBaseConf;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.common.util.ChecksumUtils;
 import org.apache.uniffle.common.util.Constants;
+import org.apache.uniffle.common.util.OpaqueBlockId;
 import org.apache.uniffle.server.buffer.ShuffleBufferManager;
 import org.apache.uniffle.server.event.AppPurgeEvent;
 import org.apache.uniffle.server.event.ShufflePurgeEvent;
@@ -343,6 +345,7 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
     int storageIndex1 = storagePaths.indexOf(flushEvent.getUnderStorage().getStoragePath());
     validateLocalMetadata(storageManager, storageIndex1, 1010L);
 
+    storageManager.getStorageChecker().checkIsHealthy();
     flushEvent = createShuffleDataFlushEvent(appId, 3, 1, 1, 10, 102, null);
     manager.addToFlushQueue(flushEvent);
     // wait for write data
@@ -657,7 +660,12 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
       new Random().nextBytes(buf);
       blocks.add(
           new ShufflePartitionedBlock(
-              length, length, ChecksumUtils.getCrc32(buf), ATOMIC_INT.incrementAndGet(), 0, buf));
+              length,
+              length,
+              ChecksumUtils.getCrc32(buf),
+              new OpaqueBlockId(ATOMIC_INT.incrementAndGet()),
+              0,
+              buf));
     }
     return blocks;
   }
@@ -669,11 +677,11 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
       List<ShufflePartitionedBlock> blocks,
       int partitionNumPerRange,
       String basePath) {
-    Roaring64NavigableMap expectBlockIds = Roaring64NavigableMap.bitmapOf();
-    Roaring64NavigableMap processBlockIds = Roaring64NavigableMap.bitmapOf();
-    Set<Long> remainIds = Sets.newHashSet();
+    BlockIdSet expectBlockIds = BlockIdSet.empty();
+    BlockIdSet processBlockIds = BlockIdSet.empty();
+    Set<BlockId> remainIds = Sets.newHashSet();
     for (ShufflePartitionedBlock spb : blocks) {
-      expectBlockIds.addLong(spb.getBlockId());
+      expectBlockIds.add(spb.getBlockId());
       remainIds.add(spb.getBlockId());
     }
     HadoopClientReadHandler handler =
@@ -695,7 +703,7 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
     List<BufferSegment> bufferSegments = sdr.getBufferSegments();
     for (ShufflePartitionedBlock block : blocks) {
       for (BufferSegment bs : bufferSegments) {
-        if (bs.getBlockId() == block.getBlockId()) {
+        if (bs.getBlockId().equals(block.getBlockId())) {
           matchNum++;
           break;
         }
@@ -737,6 +745,7 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
     Thread.sleep(1000);
     assertTrue(event.getUnderStorage() instanceof LocalStorage);
 
+    storageManager.getStorageChecker().checkIsHealthy();
     // case2: huge event is written to cold storage directly
     event = createShuffleDataFlushEvent(appId, 1, 1, 1, null, 100000);
     flushManager.addToFlushQueue(event);
@@ -746,13 +755,15 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
 
     // case3: local disk is full or corrupted, fallback to HDFS
     List<ShufflePartitionedBlock> blocks =
-        Lists.newArrayList(new ShufflePartitionedBlock(100000, 1000, 1, 1, 1L, (byte[]) null));
+        Lists.newArrayList(
+            new ShufflePartitionedBlock(100000, 1000, 1, new OpaqueBlockId(1), 1L, (byte[]) null));
     ShuffleDataFlushEvent bigEvent =
         new ShuffleDataFlushEvent(1, "1", 2, 1, 1, 100, blocks, null, null);
     bigEvent.setUnderStorage(
         ((HybridStorageManager) storageManager).getWarmStorageManager().selectStorage(event));
     ((HybridStorageManager) storageManager).getWarmStorageManager().updateWriteMetrics(bigEvent, 0);
 
+    storageManager.getStorageChecker().checkIsHealthy();
     event = createShuffleDataFlushEvent(appId, 3, 1, 1, null, 100);
     flushManager.addToFlushQueue(event);
     Thread.sleep(1000);
@@ -793,6 +804,7 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
     assertEquals(0, event.getRetryTimes());
     assertEquals(1, ShuffleServerMetrics.counterLocalFileEventFlush.get());
 
+    storageManager.getStorageChecker().checkIsHealthy();
     // case2: huge event is written to cold storage directly
     event = createShuffleDataFlushEvent(appId, 1, 1, 1, null, 100000);
     flushManager.addToFlushQueue(event);
@@ -802,13 +814,15 @@ public class ShuffleFlushManagerTest extends HadoopTestBase {
 
     // case3: local disk is full or corrupted, fallback to HDFS
     List<ShufflePartitionedBlock> blocks =
-        Lists.newArrayList(new ShufflePartitionedBlock(100000, 1000, 1, 1, 1L, (byte[]) null));
+        Lists.newArrayList(
+            new ShufflePartitionedBlock(100000, 1000, 1, new OpaqueBlockId(1), 1L, (byte[]) null));
     ShuffleDataFlushEvent bigEvent =
         new ShuffleDataFlushEvent(1, "1", 1, 1, 1, 100, blocks, null, null);
     bigEvent.setUnderStorage(
         ((HybridStorageManager) storageManager).getWarmStorageManager().selectStorage(event));
     ((HybridStorageManager) storageManager).getWarmStorageManager().updateWriteMetrics(bigEvent, 0);
 
+    storageManager.getStorageChecker().checkIsHealthy();
     event = createShuffleDataFlushEvent(appId, 2, 1, 1, null, 100);
     flushManager.addToFlushQueue(event);
     waitForFlush(flushManager, appId, 2, 5);

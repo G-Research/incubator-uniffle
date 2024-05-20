@@ -43,6 +43,8 @@ import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleDataDistributionType;
 import org.apache.uniffle.common.ShuffleServerInfo;
 import org.apache.uniffle.common.rpc.ServerType;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.coordinator.CoordinatorServer;
 import org.apache.uniffle.server.MockedGrpcServer;
@@ -63,6 +65,7 @@ public class RpcClientRetryTest extends ShuffleReadWriteBase {
 
   private ShuffleClientFactory.ReadClientBuilder baseReadBuilder(StorageType storageType) {
     return ShuffleClientFactory.newReadBuilder()
+        .clientType(ClientType.GRPC)
         .storageType(storageType.name())
         .shuffleId(0)
         .partitionId(0)
@@ -150,8 +153,8 @@ public class RpcClientRetryTest extends ShuffleReadWriteBase {
   public void testRpcRetryLogic(StorageType storageType) {
     String testAppId = "testRpcRetryLogic";
     registerShuffleServer(testAppId, 3, 2, 2, true);
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap blockIdBitmap = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet blockIdBitmap = BlockIdSet.empty();
 
     List<ShuffleBlockInfo> blocks =
         createShuffleBlockList(
@@ -165,13 +168,13 @@ public class RpcClientRetryTest extends ShuffleReadWriteBase {
             Lists.newArrayList(shuffleServerInfo0, shuffleServerInfo1, shuffleServerInfo2));
 
     SendShuffleDataResult result = shuffleWriteClientImpl.sendShuffleData(testAppId, blocks);
-    Roaring64NavigableMap failedBlockIdBitmap = Roaring64NavigableMap.bitmapOf();
-    Roaring64NavigableMap successfulBlockIdBitmap = Roaring64NavigableMap.bitmapOf();
-    for (Long blockId : result.getSuccessBlockIds()) {
-      successfulBlockIdBitmap.addLong(blockId);
+    BlockIdSet failedBlockIdBitmap = BlockIdSet.empty();
+    BlockIdSet successfulBlockIdBitmap = BlockIdSet.empty();
+    for (BlockId blockId : result.getSuccessBlockIds()) {
+      successfulBlockIdBitmap.add(blockId);
     }
-    for (Long blockId : result.getFailedBlockIds()) {
-      failedBlockIdBitmap.addLong(blockId);
+    for (BlockId blockId : result.getFailedBlockIds()) {
+      failedBlockIdBitmap.add(blockId);
     }
     assertEquals(0, failedBlockIdBitmap.getLongCardinality());
     assertEquals(blockIdBitmap, successfulBlockIdBitmap);

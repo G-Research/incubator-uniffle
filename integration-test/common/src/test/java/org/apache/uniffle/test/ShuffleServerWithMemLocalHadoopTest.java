@@ -43,15 +43,14 @@ import org.apache.uniffle.client.request.RssRegisterShuffleRequest;
 import org.apache.uniffle.client.request.RssSendShuffleDataRequest;
 import org.apache.uniffle.client.response.RssSendShuffleDataResponse;
 import org.apache.uniffle.common.BufferSegment;
-import org.apache.uniffle.common.ClientType;
 import org.apache.uniffle.common.PartitionRange;
 import org.apache.uniffle.common.ShuffleBlockInfo;
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.ShuffleServerInfo;
-import org.apache.uniffle.common.config.RssClientConf;
-import org.apache.uniffle.common.config.RssConf;
 import org.apache.uniffle.common.rpc.ServerType;
 import org.apache.uniffle.common.rpc.StatusCode;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.common.util.ByteBufUtils;
 import org.apache.uniffle.coordinator.CoordinatorConf;
 import org.apache.uniffle.server.ShuffleServer;
@@ -76,7 +75,7 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
       LoggerFactory.getLogger(ShuffleServerWithMemLocalHadoopTest.class);
   private ShuffleServerGrpcClient grpcShuffleServerClient;
   private ShuffleServerGrpcNettyClient nettyShuffleServerClient;
-  private static String REMOTE_STORAGE = HDFS_URI + "rss/test";
+  private static String REMOTE_STORAGE = HDFS_URI + "rss/test_%s";
   private static ShuffleServerConf grpcShuffleServerConfig;
   private static ShuffleServerConf nettyShuffleServerConfig;
 
@@ -107,11 +106,8 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     grpcShuffleServerClient =
         new ShuffleServerGrpcClient(
             LOCALHOST, grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT));
-    RssConf rssConf = new RssConf();
-    rssConf.set(RssClientConf.RSS_CLIENT_TYPE, ClientType.GRPC_NETTY);
     nettyShuffleServerClient =
         new ShuffleServerGrpcNettyClient(
-            rssConf,
             LOCALHOST,
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT),
             nettyShuffleServerConfig.getInteger(ShuffleServerConf.NETTY_SERVER_PORT));
@@ -167,10 +163,13 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     int partitionId = 0;
     RssRegisterShuffleRequest rrsr =
         new RssRegisterShuffleRequest(
-            testAppId, 0, Lists.newArrayList(new PartitionRange(0, 0)), REMOTE_STORAGE);
+            testAppId,
+            0,
+            Lists.newArrayList(new PartitionRange(0, 0)),
+            String.format(REMOTE_STORAGE, isNettyMode));
     shuffleServerClient.registerShuffle(rrsr);
-    Roaring64NavigableMap expectBlockIds = Roaring64NavigableMap.bitmapOf();
-    Map<Long, byte[]> dataMap = Maps.newHashMap();
+    BlockIdSet expectBlockIds = BlockIdSet.empty();
+    Map<BlockId, byte[]> dataMap = Maps.newHashMap();
     Roaring64NavigableMap[] bitmaps = new Roaring64NavigableMap[1];
     bitmaps[0] = Roaring64NavigableMap.bitmapOf();
     List<ShuffleBlockInfo> blocks =
@@ -187,7 +186,7 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     RssSendShuffleDataResponse response = shuffleServerClient.sendShuffleData(rssdr);
     assertSame(StatusCode.SUCCESS, response.getStatusCode());
 
-    Roaring64NavigableMap processBlockIds = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet processBlockIds = BlockIdSet.empty();
     Roaring64NavigableMap exceptTaskIds = Roaring64NavigableMap.bitmapOf(0);
     // read the 1-th segment from memory
     MemoryClientReadHandler memoryClientReadHandler =
@@ -216,7 +215,7 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
             500,
             expectBlockIds,
             processBlockIds,
-            REMOTE_STORAGE,
+            String.format(REMOTE_STORAGE, isNettyMode),
             conf);
     ClientReadHandler[] handlers = new ClientReadHandler[3];
     handlers[0] = memoryClientReadHandler;
@@ -232,16 +231,16 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
                 LOCALHOST, grpcShuffleServerConfig.getInteger(ShuffleServerConf.RPC_SERVER_PORT));
     ComposedClientReadHandler composedClientReadHandler =
         new ComposedClientReadHandler(ssi, handlers);
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
     expectedData.clear();
     expectedData.put(blocks.get(0).getBlockId(), ByteBufUtils.readBytes(blocks.get(0).getData()));
     expectedData.put(blocks.get(1).getBlockId(), ByteBufUtils.readBytes(blocks.get(1).getData()));
     expectedData.put(blocks.get(2).getBlockId(), ByteBufUtils.readBytes(blocks.get(2).getData()));
     ShuffleDataResult sdr = composedClientReadHandler.readShuffleData();
     validateResult(expectedData, sdr);
-    processBlockIds.addLong(blocks.get(0).getBlockId());
-    processBlockIds.addLong(blocks.get(1).getBlockId());
-    processBlockIds.addLong(blocks.get(2).getBlockId());
+    processBlockIds.add(blocks.get(0).getBlockId());
+    processBlockIds.add(blocks.get(1).getBlockId());
+    processBlockIds.add(blocks.get(2).getBlockId());
     sdr.getBufferSegments()
         .forEach(bs -> composedClientReadHandler.updateConsumedBlockInfo(bs, checkSkippedMetrics));
 
@@ -264,8 +263,8 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     expectedData.put(blocks2.get(0).getBlockId(), ByteBufUtils.readBytes(blocks2.get(0).getData()));
     expectedData.put(blocks2.get(1).getBlockId(), ByteBufUtils.readBytes(blocks2.get(1).getData()));
     validateResult(expectedData, sdr);
-    processBlockIds.addLong(blocks2.get(0).getBlockId());
-    processBlockIds.addLong(blocks2.get(1).getBlockId());
+    processBlockIds.add(blocks2.get(0).getBlockId());
+    processBlockIds.add(blocks2.get(1).getBlockId());
     sdr.getBufferSegments()
         .forEach(bs -> composedClientReadHandler.updateConsumedBlockInfo(bs, checkSkippedMetrics));
 
@@ -274,7 +273,7 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     expectedData.clear();
     expectedData.put(blocks2.get(2).getBlockId(), ByteBufUtils.readBytes(blocks2.get(2).getData()));
     validateResult(expectedData, sdr);
-    processBlockIds.addLong(blocks2.get(2).getBlockId());
+    processBlockIds.add(blocks2.get(2).getBlockId());
     sdr.getBufferSegments()
         .forEach(bs -> composedClientReadHandler.updateConsumedBlockInfo(bs, checkSkippedMetrics));
 
@@ -296,8 +295,8 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     expectedData.put(blocks3.get(0).getBlockId(), ByteBufUtils.readBytes(blocks3.get(0).getData()));
     expectedData.put(blocks3.get(1).getBlockId(), ByteBufUtils.readBytes(blocks3.get(1).getData()));
     validateResult(expectedData, sdr);
-    processBlockIds.addLong(blocks3.get(0).getBlockId());
-    processBlockIds.addLong(blocks3.get(1).getBlockId());
+    processBlockIds.add(blocks3.get(0).getBlockId());
+    processBlockIds.add(blocks3.get(1).getBlockId());
     sdr.getBufferSegments()
         .forEach(bs -> composedClientReadHandler.updateConsumedBlockInfo(bs, checkSkippedMetrics));
 
@@ -356,11 +355,11 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     }
   }
 
-  protected void validateResult(Map<Long, byte[]> expectedData, ShuffleDataResult sdr) {
+  protected void validateResult(Map<BlockId, byte[]> expectedData, ShuffleDataResult sdr) {
     byte[] buffer = sdr.getData();
     List<BufferSegment> bufferSegments = sdr.getBufferSegments();
     assertEquals(expectedData.size(), bufferSegments.size());
-    for (Map.Entry<Long, byte[]> entry : expectedData.entrySet()) {
+    for (Map.Entry<BlockId, byte[]> entry : expectedData.entrySet()) {
       BufferSegment bs = findBufferSegment(entry.getKey(), bufferSegments);
       assertNotNull(bs);
       byte[] data = new byte[bs.getLength()];
@@ -368,9 +367,9 @@ public class ShuffleServerWithMemLocalHadoopTest extends ShuffleReadWriteBase {
     }
   }
 
-  private BufferSegment findBufferSegment(long blockId, List<BufferSegment> bufferSegments) {
+  private BufferSegment findBufferSegment(BlockId blockId, List<BufferSegment> bufferSegments) {
     for (BufferSegment bs : bufferSegments) {
-      if (bs.getBlockId() == blockId) {
+      if (bs.getBlockId().equals(blockId)) {
         return bs;
       }
     }

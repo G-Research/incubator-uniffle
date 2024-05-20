@@ -20,6 +20,7 @@ package org.apache.uniffle.server.buffer;
 import java.io.File;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -28,6 +29,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.collect.RangeMap;
 import com.google.common.util.concurrent.Uninterruptibles;
+import io.prometheus.client.Collector;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,9 +40,10 @@ import org.apache.uniffle.common.PartitionRange;
 import org.apache.uniffle.common.RemoteStorageInfo;
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.ShufflePartitionedData;
+import org.apache.uniffle.common.config.ConfigUtils;
 import org.apache.uniffle.common.rpc.StatusCode;
+import org.apache.uniffle.common.util.BlockId;
 import org.apache.uniffle.common.util.ByteBufUtils;
-import org.apache.uniffle.common.util.Constants;
 import org.apache.uniffle.server.DefaultFlushEventHandler;
 import org.apache.uniffle.server.ShuffleFlushManager;
 import org.apache.uniffle.server.ShuffleServer;
@@ -134,13 +137,13 @@ public class ShuffleBufferManagerTest extends BufferTestBase {
     /** case1: all blocks in cached and read multiple times */
     ShuffleDataResult result =
         shuffleBufferManager.getShuffleData(
-            appId, 1, 0, Constants.INVALID_BLOCK_ID, 60, Roaring64NavigableMap.bitmapOf(1));
+            appId, 1, 0, null, 60, Roaring64NavigableMap.bitmapOf(1));
     assertEquals(1, result.getBufferSegments().size());
     assertEquals(0, result.getBufferSegments().get(0).getOffset());
     assertEquals(68, result.getBufferSegments().get(0).getLength());
 
     // 2nd read
-    long lastBlockId = result.getBufferSegments().get(0).getBlockId();
+    BlockId lastBlockId = result.getBufferSegments().get(0).getBlockId();
     result =
         shuffleBufferManager.getShuffleData(
             appId, 1, 0, lastBlockId, 60, Roaring64NavigableMap.bitmapOf(1));
@@ -175,10 +178,9 @@ public class ShuffleBufferManagerTest extends BufferTestBase {
     assertEquals(200, bufferPool.get(appId).get(2).get(0).getSize());
     assertEquals(100, bufferPool.get(appId).get(3).get(0).getSize());
     // validate get shuffle data
-    ShuffleDataResult sdr =
-        shuffleBufferManager.getShuffleData(appId, 2, 0, Constants.INVALID_BLOCK_ID, 60);
+    ShuffleDataResult sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, null, 60);
     assertArrayEquals(ByteBufUtils.readBytes(spd2.getBlockList()[0].getData()), sdr.getData());
-    long lastBlockId = spd2.getBlockList()[0].getBlockId();
+    BlockId lastBlockId = spd2.getBlockList()[0].getBlockId();
     sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, lastBlockId, 100);
     assertArrayEquals(ByteBufUtils.readBytes(spd3.getBlockList()[0].getData()), sdr.getData());
     // flush happen
@@ -194,7 +196,7 @@ public class ShuffleBufferManagerTest extends BufferTestBase {
     // keep buffer whose size < low watermark
     assertEquals(1, bufferPool.get(appId).get(4).get(0).getBlocks().size());
     // data in flush buffer now, it also can be got before flush finish
-    sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, Constants.INVALID_BLOCK_ID, 60);
+    sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, null, 60);
     assertArrayEquals(ByteBufUtils.readBytes(spd2.getBlockList()[0].getData()), sdr.getData());
     lastBlockId = spd2.getBlockList()[0].getBlockId();
     sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, lastBlockId, 100);
@@ -208,7 +210,7 @@ public class ShuffleBufferManagerTest extends BufferTestBase {
     bufferPool.get(appId).get(2).get(0).getInFlushBlockMap().clear();
     bufferPool.get(appId).get(3).get(0).getInFlushBlockMap().clear();
     // empty data return
-    sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, Constants.INVALID_BLOCK_ID, 60);
+    sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, null, 60);
     assertEquals(0, sdr.getDataLength());
     lastBlockId = spd2.getBlockList()[0].getBlockId();
     sdr = shuffleBufferManager.getShuffleData(appId, 2, 0, lastBlockId, 100);
@@ -728,5 +730,46 @@ public class ShuffleBufferManagerTest extends BufferTestBase {
     executor.shutdown();
     assertEquals(0, shuffleBufferManager.getUsedMemory());
     assertEquals(0, shuffleBufferManager.getInFlushSize());
+  }
+
+  @Test
+  public void blockSizeMetricsTest() {
+    String appId = "blockSizeMetricsTest";
+    shuffleBufferManager.setShuffleTaskManager(mockShuffleTaskManager);
+    ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    when(mockShuffleTaskManager.getAppReadLock(appId)).thenReturn(rwLock.readLock());
+    when(mockShuffleServer.getShuffleTaskManager()).thenReturn(mockShuffleTaskManager);
+    int shuffleId = 1;
+    shuffleBufferManager.registerBuffer(appId, shuffleId, 0, 1);
+
+    // cache shuffle block data, and record metrics
+    double[] buckets =
+        ConfigUtils.convertBytesStringToDoubleArray(
+            new ShuffleServerConf()
+                .get(ShuffleServerConf.APP_LEVEL_SHUFFLE_BLOCK_SIZE_METRIC_BUCKETS));
+    Arrays.stream(buckets)
+        .sorted()
+        .forEach(
+            bucket -> {
+              StatusCode sc =
+                  shuffleBufferManager.cacheShuffleData(
+                      appId, shuffleId, true, createData(0, (int) bucket));
+              assertEquals(StatusCode.SUCCESS, sc);
+            });
+    // check metrics values
+    List<Collector.MetricFamilySamples> samples =
+        ShuffleServerMetrics.appHistogramWriteBlockSize.collect();
+    assertEquals(samples.size(), 1);
+    int index = 1;
+    Arrays.stream(buckets)
+        .sorted()
+        .forEach(
+            bucket -> {
+              for (Collector.MetricFamilySamples.Sample s : samples.get(0).samples) {
+                if (s.labelValues.contains(bucket)) {
+                  assertEquals(s.value, index);
+                }
+              }
+            });
   }
 }

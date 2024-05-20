@@ -27,11 +27,12 @@ import com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Test;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.BufferSegment;
 import org.apache.uniffle.common.ShuffleDataResult;
 import org.apache.uniffle.common.ShuffleIndexResult;
+import org.apache.uniffle.common.util.BlockId;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.storage.HadoopTestBase;
 import org.apache.uniffle.storage.common.FileBasedShuffleSegment;
 import org.apache.uniffle.storage.util.ShuffleStorageUtils;
@@ -51,8 +52,8 @@ public class HadoopClientReadHandlerTest extends HadoopTestBase {
     HadoopShuffleWriteHandler writeHandler =
         new HadoopShuffleWriteHandler("appId", 0, 1, 1, basePath, "test", hadoopConf, writeUser);
 
-    Map<Long, byte[]> expectedData = Maps.newHashMap();
-    Roaring64NavigableMap expectBlockIds = Roaring64NavigableMap.bitmapOf();
+    Map<BlockId, byte[]> expectedData = Maps.newHashMap();
+    BlockIdSet expectBlockIds = BlockIdSet.empty();
 
     int readBufferSize = 13;
     int total = 0;
@@ -65,7 +66,7 @@ public class HadoopClientReadHandlerTest extends HadoopTestBase {
       writeTestData(writeHandler, num, 3, 0, expectedData);
       total += calcExpectedSegmentNum(num, 3, readBufferSize);
       expectTotalBlockNum += num;
-      expectedData.forEach((id, block) -> expectBlockIds.addLong(id));
+      expectedData.forEach((id, block) -> expectBlockIds.add(id));
     }
 
     /** This part is to check the fault tolerance of reading HDFS incomplete index file */
@@ -75,7 +76,7 @@ public class HadoopClientReadHandlerTest extends HadoopTestBase {
     indexWriter.writeData(ByteBuffer.allocate(4).putInt(999).array());
     indexWriter.close();
 
-    Roaring64NavigableMap processBlockIds = Roaring64NavigableMap.bitmapOf();
+    BlockIdSet processBlockIds = BlockIdSet.empty();
 
     HadoopShuffleReadHandler indexReader =
         new HadoopShuffleReadHandler(
@@ -108,7 +109,7 @@ public class HadoopClientReadHandlerTest extends HadoopTestBase {
             processBlockIds,
             basePath,
             hadoopConf);
-    Set<Long> actualBlockIds = Sets.newHashSet();
+    Set<BlockId> actualBlockIds = Sets.newHashSet();
 
     for (int i = 0; i < total; ++i) {
       ShuffleDataResult shuffleDataResult = handler.readShuffleData();

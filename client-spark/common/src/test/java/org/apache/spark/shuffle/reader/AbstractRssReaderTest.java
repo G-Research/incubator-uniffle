@@ -32,12 +32,13 @@ import com.google.common.collect.Sets;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import org.apache.uniffle.common.ShufflePartitionedBlock;
 import org.apache.uniffle.common.compression.Codec;
 import org.apache.uniffle.common.config.RssConf;
+import org.apache.uniffle.common.util.BlockId;
 import org.apache.uniffle.common.util.BlockIdLayout;
+import org.apache.uniffle.common.util.BlockIdSet;
 import org.apache.uniffle.common.util.ChecksumUtils;
 import org.apache.uniffle.storage.HadoopTestBase;
 import org.apache.uniffle.storage.handler.api.ShuffleWriteHandler;
@@ -67,7 +68,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int blockNum,
       int recordNum,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      BlockIdSet blockIdBitmap,
       String keyPrefix,
       Serializer serializer,
       int partitionID)
@@ -91,7 +92,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int recordNum,
       BlockIdLayout layout,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      BlockIdSet blockIdBitmap,
       String keyPrefix,
       Serializer serializer,
       int partitionID)
@@ -114,7 +115,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int blockNum,
       int recordNum,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      BlockIdSet blockIdBitmap,
       String keyPrefix,
       Serializer serializer,
       int partitionID,
@@ -139,7 +140,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
       int recordNum,
       BlockIdLayout layout,
       Map<String, String> expectedData,
-      Roaring64NavigableMap blockIdBitmap,
+      BlockIdSet blockIdBitmap,
       String keyPrefix,
       Serializer serializer,
       int partitionID,
@@ -156,7 +157,7 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
         expectedData.put(key, value);
         writeData(serializeStream, key, value);
       }
-      long blockId = layout.getBlockId(atomicInteger.getAndIncrement(), partitionID, 0);
+      BlockId blockId = layout.asBlockId(atomicInteger.getAndIncrement(), partitionID, 0);
       blockIdBitmap.add(blockId);
       blocks.add(createShuffleBlock(output.toBytes(), blockId, compress));
       serializeStream.close();
@@ -164,12 +165,12 @@ public abstract class AbstractRssReaderTest extends HadoopTestBase {
     handler.write(blocks);
   }
 
-  protected ShufflePartitionedBlock createShuffleBlock(byte[] data, long blockId) {
+  protected ShufflePartitionedBlock createShuffleBlock(byte[] data, BlockId blockId) {
     return createShuffleBlock(data, blockId, true);
   }
 
   protected ShufflePartitionedBlock createShuffleBlock(
-      byte[] data, long blockId, boolean compress) {
+      byte[] data, BlockId blockId, boolean compress) {
     byte[] compressData = data;
     if (compress) {
       compressData = Codec.newInstance(new RssConf()).compress(data);
