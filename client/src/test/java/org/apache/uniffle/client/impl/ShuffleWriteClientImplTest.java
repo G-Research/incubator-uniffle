@@ -78,6 +78,7 @@ public class ShuffleWriteClientImplTest {
             .dataTransferPoolSize(1)
             .dataCommitPoolSize(1)
             .unregisterThreadPoolSize(10)
+            .unregisterTimeSec(60)
             .unregisterRequestTimeSec(10)
             .build();
     ShuffleServerClient mockShuffleServerClient = mock(ShuffleServerClient.class);
@@ -124,6 +125,7 @@ public class ShuffleWriteClientImplTest {
             .dataTransferPoolSize(1)
             .dataCommitPoolSize(1)
             .unregisterThreadPoolSize(10)
+            .unregisterTimeSec(60)
             .unregisterRequestTimeSec(10)
             .build();
     ShuffleServerClient mockShuffleServerClient = mock(ShuffleServerClient.class);
@@ -145,6 +147,20 @@ public class ShuffleWriteClientImplTest {
   }
 
   @Test
+  public void testSequentiality() {
+    assertEquals(0, ShuffleWriteClientImpl.sequentiality(0, 1));
+    assertEquals(1, ShuffleWriteClientImpl.sequentiality(1, 1));
+    assertEquals(2, ShuffleWriteClientImpl.sequentiality(2, 1));
+    assertEquals(1, ShuffleWriteClientImpl.sequentiality(2, 2));
+    assertEquals(1, ShuffleWriteClientImpl.sequentiality(2, 3));
+    assertEquals(1, ShuffleWriteClientImpl.sequentiality(3, 3));
+    assertEquals(2, ShuffleWriteClientImpl.sequentiality(4, 3));
+    assertEquals(2, ShuffleWriteClientImpl.sequentiality(5, 3));
+    assertEquals(2, ShuffleWriteClientImpl.sequentiality(6, 3));
+    assertEquals(3, ShuffleWriteClientImpl.sequentiality(7, 3));
+  }
+
+  @Test
   public void testRegisterAndUnRegisterShuffleServer() {
     ShuffleWriteClientImpl shuffleWriteClient =
         ShuffleClientFactory.newWriteBuilder()
@@ -159,6 +175,7 @@ public class ShuffleWriteClientImplTest {
             .dataTransferPoolSize(1)
             .dataCommitPoolSize(1)
             .unregisterThreadPoolSize(10)
+            .unregisterTimeSec(60)
             .unregisterRequestTimeSec(10)
             .build();
     String appId1 = "testRegisterAndUnRegisterShuffleServer-1";
@@ -197,6 +214,7 @@ public class ShuffleWriteClientImplTest {
             .dataTransferPoolSize(1)
             .dataCommitPoolSize(1)
             .unregisterThreadPoolSize(10)
+            .unregisterTimeSec(60)
             .unregisterRequestTimeSec(10)
             .build();
     ShuffleServerClient mockShuffleServerClient = mock(ShuffleServerClient.class);
@@ -324,6 +342,7 @@ public class ShuffleWriteClientImplTest {
             .dataTransferPoolSize(1)
             .dataCommitPoolSize(1)
             .unregisterThreadPoolSize(10)
+            .unregisterTimeSec(60)
             .unregisterRequestTimeSec(10)
             .rssConf(rssConf);
     ShuffleWriteClientImpl client = writeClientBuilder.build();
@@ -357,6 +376,7 @@ public class ShuffleWriteClientImplTest {
             .dataTransferPoolSize(1)
             .dataCommitPoolSize(1)
             .unregisterThreadPoolSize(10)
+            .unregisterTimeSec(60)
             .unregisterRequestTimeSec(10)
             .rssConf(rssConf)
             .build();

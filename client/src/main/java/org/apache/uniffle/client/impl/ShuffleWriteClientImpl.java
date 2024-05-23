@@ -113,6 +113,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
   private int dataCommitPoolSize = -1;
   private final ExecutorService dataTransferPool;
   private final int unregisterThreadPoolSize;
+  private final int unregisterTimeSec;
   private final int unregisterRequestTimeSec;
   private Set<ShuffleServerInfo> defectiveServers;
   private RssConf rssConf;
@@ -125,6 +126,9 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     }
     if (builder.getUnregisterThreadPoolSize() == 0) {
       builder.unregisterThreadPoolSize(10);
+    }
+    if (builder.getUnregisterTimeSec() == 0) {
+      builder.unregisterTimeSec(60);
     }
     if (builder.getUnregisterRequestTimeSec() == 0) {
       builder.unregisterRequestTimeSec(10);
@@ -144,6 +148,7 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
             builder.getDataTransferPoolSize(), "client-data-transfer");
     this.dataCommitPoolSize = builder.getDataCommitPoolSize();
     this.unregisterThreadPoolSize = builder.getUnregisterThreadPoolSize();
+    this.unregisterTimeSec = builder.getUnregisterTimeSec();
     this.unregisterRequestTimeSec = builder.getUnregisterRequestTimeSec();
     if (replica > 1) {
       defectiveServers = Sets.newConcurrentHashSet();
@@ -942,10 +947,18 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     dataTransferPool.shutdownNow();
   }
 
+  @VisibleForTesting
+  // Given some number of tasks and the concurrency (number of threads),
+  // computes how many tasks may be executed sequentially
+  protected static int sequentiality(int tasks, int concurrency) {
+    return (int) Math.ceil((float) tasks / concurrency);
+  }
+
   @Override
   public void unregisterShuffle(String appId, int shuffleId) {
-    int unregisterTimeMs = unregisterRequestTimeSec * 1000;
-    RssUnregisterShuffleRequest request = new RssUnregisterShuffleRequest(appId, shuffleId);
+    int unregisterTimeMs = unregisterTimeSec * 1000;
+    RssUnregisterShuffleRequest request =
+        new RssUnregisterShuffleRequest(appId, shuffleId, unregisterRequestTimeSec);
 
     Map<Integer, Set<ShuffleServerInfo>> appServerMap = shuffleServerInfoMap.get(appId);
     if (appServerMap == null) {
@@ -955,12 +968,17 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     if (shuffleServerInfos == null) {
       return;
     }
+    LOG.info(
+        "Unregistering shuffleId[{}] from {} shuffle servers with individual timeout[{}s] and overall timeout[{}s]",
+        shuffleId,
+        shuffleServerInfos.size(),
+        unregisterRequestTimeSec,
+        unregisterTimeSec);
 
     ExecutorService executorService = null;
     try {
-      executorService =
-          ThreadUtils.getDaemonFixedThreadPool(
-              Math.min(unregisterThreadPoolSize, shuffleServerInfos.size()), "unregister-shuffle");
+      int concurrency = Math.min(unregisterThreadPoolSize, shuffleServerInfos.size());
+      executorService = ThreadUtils.getDaemonFixedThreadPool(concurrency, "unregister-shuffle");
 
       ThreadUtils.executeTasks(
           executorService,
@@ -971,11 +989,26 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                   ShuffleServerClientFactory.getInstance()
                       .getShuffleServerClient(clientType, shuffleServerInfo, rssConf);
               RssUnregisterShuffleResponse response = client.unregisterShuffle(request);
-              if (response.getStatusCode() != StatusCode.SUCCESS) {
-                LOG.warn("Failed to unregister shuffle to " + shuffleServerInfo);
+              if (response.getStatusCode() == StatusCode.SUCCESS) {
+                LOG.info("Successfully unregistered shuffle from {}", shuffleServerInfo);
+              } else {
+                LOG.warn("Failed to unregister shuffle from {}", shuffleServerInfo);
               }
             } catch (Exception e) {
-              LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
+              if (e.getCause() != null && e.getCause() instanceof InterruptedException) {
+                // InterruptedException indicates timeout, give some advice
+                LOG.warn(
+                    "Timeout occurred while unregistering from {}, please consider "
+                        + "increasing the thread pool size ({}) or the overall timeout ({}s) "
+                        + "if you think still the request timeout ({}s) is sensible.",
+                    shuffleServerInfo,
+                    unregisterThreadPoolSize,
+                    unregisterTimeSec,
+                    unregisterRequestTimeSec,
+                    e);
+              } else {
+                LOG.warn("Error while unregistering from {}", shuffleServerInfo, e);
+              }
             }
             return null;
           },
@@ -992,8 +1025,9 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
 
   @Override
   public void unregisterShuffle(String appId) {
-    int unregisterTimeMs = unregisterRequestTimeSec * 1000;
-    RssUnregisterShuffleByAppIdRequest request = new RssUnregisterShuffleByAppIdRequest(appId);
+    int unregisterTimeMs = unregisterTimeSec * 1000;
+    RssUnregisterShuffleByAppIdRequest request =
+        new RssUnregisterShuffleByAppIdRequest(appId, unregisterRequestTimeSec);
 
     if (appId == null) {
       return;
@@ -1003,12 +1037,17 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       return;
     }
     Set<ShuffleServerInfo> shuffleServerInfos = getAllShuffleServers(appId);
+    LOG.info(
+        "Unregistering shuffles of appId[{}] from {} shuffle servers with individual timeout[{}s] and overall timeout[{}s]",
+        appId,
+        shuffleServerInfos.size(),
+        unregisterRequestTimeSec,
+        unregisterTimeSec);
 
     ExecutorService executorService = null;
     try {
-      executorService =
-          ThreadUtils.getDaemonFixedThreadPool(
-              Math.min(unregisterThreadPoolSize, shuffleServerInfos.size()), "unregister-shuffle");
+      int concurrency = Math.min(unregisterThreadPoolSize, shuffleServerInfos.size());
+      executorService = ThreadUtils.getDaemonFixedThreadPool(concurrency, "unregister-shuffle");
 
       ThreadUtils.executeTasks(
           executorService,
@@ -1020,11 +1059,26 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
                       .getShuffleServerClient(clientType, shuffleServerInfo, rssConf);
               RssUnregisterShuffleByAppIdResponse response =
                   client.unregisterShuffleByAppId(request);
-              if (response.getStatusCode() != StatusCode.SUCCESS) {
-                LOG.warn("Failed to unregister shuffle to " + shuffleServerInfo);
+              if (response.getStatusCode() == StatusCode.SUCCESS) {
+                LOG.info("Successfully unregistered shuffle from {}", shuffleServerInfo);
+              } else {
+                LOG.warn("Failed to unregister shuffle from {}", shuffleServerInfo);
               }
             } catch (Exception e) {
-              LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
+              if (e.getCause() != null && e.getCause() instanceof InterruptedException) {
+                // InterruptedException indicates timeout, give some advice
+                LOG.warn(
+                    "Timeout occurred while unregistering from {}, please consider "
+                        + "increasing the thread pool size ({}) or the overall timeout ({}s) "
+                        + "if you think still the request timeout ({}s) is sensible.",
+                    shuffleServerInfo,
+                    unregisterThreadPoolSize,
+                    unregisterTimeSec,
+                    unregisterRequestTimeSec,
+                    e);
+              } else {
+                LOG.warn("Error while unregistering from {}", shuffleServerInfo, e);
+              }
             }
             return null;
           },
