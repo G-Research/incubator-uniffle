@@ -937,9 +937,11 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
 
   @Override
   public void close() {
+    LOG.info("Shutting down executor services");
     heartBeatExecutorService.shutdownNow();
     coordinatorClients.forEach(CoordinatorClient::close);
     dataTransferPool.shutdownNow();
+    LOG.info("Shut down executor services");
   }
 
   @Override
@@ -954,6 +956,11 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
     if (shuffleServerInfos == null) {
       return;
     }
+    LOG.info(
+        "Unregistering shuffleId[{}] from {} shuffle servers with request timeout[{}s]",
+        shuffleId,
+        shuffleServerInfos.size(),
+        unregisterRequestTimeSec);
 
     ExecutorService executorService = null;
     try {
@@ -969,9 +976,12 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
               ShuffleServerClient client =
                   ShuffleServerClientFactory.getInstance()
                       .getShuffleServerClient(clientType, shuffleServerInfo, rssConf);
+              LOG.info("Requesting unregistering shuffle from {}", shuffleServerInfo);
               RssUnregisterShuffleResponse response = client.unregisterShuffle(request);
-              if (response.getStatusCode() != StatusCode.SUCCESS) {
-                LOG.warn("Failed to unregister shuffle to " + shuffleServerInfo);
+              if (response.getStatusCode() == StatusCode.SUCCESS) {
+                LOG.info("Successfully unregistered shuffle from {}", shuffleServerInfo);
+              } else {
+                LOG.warn("Failed to unregister shuffle from {}", shuffleServerInfo);
               }
             } catch (Exception e) {
               LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
@@ -982,7 +992,9 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
           "unregister shuffle server");
 
     } finally {
+      LOG.info("Unregistering shuffleId[{}] completed", shuffleId);
       if (executorService != null) {
+        LOG.info("Shutting down executor service");
         executorService.shutdownNow();
       }
       removeShuffleServer(appId, shuffleId);
@@ -1001,6 +1013,11 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
       return;
     }
     Set<ShuffleServerInfo> shuffleServerInfos = getAllShuffleServers(appId);
+    LOG.info(
+        "Unregistering shuffles of appId[{}] from {} shuffle servers with request timeout[{}s]",
+        appId,
+        shuffleServerInfos.size(),
+        unregisterRequestTimeSec);
 
     ExecutorService executorService = null;
     try {
@@ -1016,10 +1033,13 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
               ShuffleServerClient client =
                   ShuffleServerClientFactory.getInstance()
                       .getShuffleServerClient(clientType, shuffleServerInfo, rssConf);
+              LOG.info("Requesting unregistering shuffle from {}", shuffleServerInfo);
               RssUnregisterShuffleByAppIdResponse response =
                   client.unregisterShuffleByAppId(request);
-              if (response.getStatusCode() != StatusCode.SUCCESS) {
-                LOG.warn("Failed to unregister shuffle to " + shuffleServerInfo);
+              if (response.getStatusCode() == StatusCode.SUCCESS) {
+                LOG.info("Successfully unregistered shuffle from {}", shuffleServerInfo);
+              } else {
+                LOG.warn("Failed to unregister shuffle from {}", shuffleServerInfo);
               }
             } catch (Exception e) {
               LOG.warn("Error happened when unregistering to " + shuffleServerInfo, e);
@@ -1030,8 +1050,11 @@ public class ShuffleWriteClientImpl implements ShuffleWriteClient {
           "unregister shuffle server");
 
     } finally {
+      LOG.info("Unregistering appId[{}] completed", appId);
       if (executorService != null) {
+        LOG.info("Shutting down executor service");
         executorService.shutdownNow();
+        LOG.info("Shut down executor service");
       }
       shuffleServerInfoMap.remove(appId);
     }
