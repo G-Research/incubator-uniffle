@@ -67,6 +67,7 @@ public class ShuffleClientFactory {
     private int dataTransferPoolSize;
     private int dataCommitPoolSize;
     private int unregisterThreadPoolSize;
+    private int unregisterTimeSec;
     private int unregisterRequestTimeSec;
     private RssConf rssConf;
 
@@ -112,6 +113,10 @@ public class ShuffleClientFactory {
 
     public int getUnregisterThreadPoolSize() {
       return unregisterThreadPoolSize;
+    }
+
+    public int getUnregisterTimeSec() {
+      return unregisterTimeSec;
     }
 
     public int getUnregisterRequestTimeSec() {
@@ -174,6 +179,11 @@ public class ShuffleClientFactory {
 
     public WriteClientBuilder unregisterThreadPoolSize(int unregisterThreadPoolSize) {
       this.unregisterThreadPoolSize = unregisterThreadPoolSize;
+      return this;
+    }
+
+    public WriteClientBuilder unregisterTimeSec(int unregisterTimeSec) {
+      this.unregisterTimeSec = unregisterTimeSec;
       return this;
     }
 
